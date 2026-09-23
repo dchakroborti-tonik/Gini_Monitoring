@@ -1,0 +1,197 @@
+# ============================================================
+# DATA FILES
+# ============================================================
+
+# CSV files
+*.csv
+
+# Excel files
+*.xlsx
+*.xls
+*.xlsm
+*.xlsb
+
+# Other common data/output files
+*.parquet
+*.feather
+
+# Temporary Excel files
+~$*.xlsx
+~$*.xls
+
+
+# ============================================================
+# PYTHON VIRTUAL ENVIRONMENTS
+# ============================================================
+
+venv/
+.venv/
+env/
+.env/
+ENV/
+virtualenv/
+
+
+# ============================================================
+# PYTHON CACHE / COMPILED FILES
+# ============================================================
+
+__pycache__/
+*.py[cod]
+*$py.class
+
+*.pyd
+*.so
+
+
+# ============================================================
+# PYTHON TOOL CACHE
+# ============================================================
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pytype/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+
+
+# ============================================================
+# JUPYTER NOTEBOOK
+# ============================================================
+
+.ipynb_checkpoints/
+
+
+# ============================================================
+# VS CODE
+# ============================================================
+
+.vscode/
+
+
+# ============================================================
+# PYCHARM / INTELLIJ
+# ============================================================
+
+.idea/
+*.iml
+
+
+# ============================================================
+# LOG FILES
+# ============================================================
+
+*.log
+logs/
+log/
+
+# Python/application logs
+*.out
+*.err
+
+
+# ============================================================
+# TEMPORARY FILES
+# ============================================================
+
+tmp/
+temp/
+.tmp/
+.cache/
+
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+
+
+# ============================================================
+# ENVIRONMENT / SECRETS
+# ============================================================
+
+.env
+.env.*
+*.env
+
+# Credentials / keys
+*.pem
+*.key
+*.crt
+credentials.json
+secrets.json
+service-account*.json
+
+
+# ============================================================
+# BUILD / DISTRIBUTION FILES
+# ============================================================
+
+build/
+dist/
+*.egg-info/
+.eggs/
+wheels/
+
+
+# ============================================================
+# OS GENERATED FILES
+# ============================================================
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+.directory
+
+
+# ============================================================
+# PROJECT OUTPUT / ARTIFACTS
+# ============================================================
+
+output/
+outputs/
+results/
+artifacts/
+
+
+# ============================================================
+# LOCAL CONFIGURATION
+# ============================================================
+
+*.local
+config.local.*
+
+# Raw / processed datasets
+data/
+raw_data/
+processed_data/
+
+# Model artifacts
+models/
+*.pkl
+*.pickle
+*.joblib
+
+# Reports / generated outputs
+output/
+outputs/
+reports/generated/
+
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
