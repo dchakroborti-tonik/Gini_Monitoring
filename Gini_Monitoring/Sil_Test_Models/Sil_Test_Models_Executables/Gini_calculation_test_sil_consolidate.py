@@ -4,6 +4,20 @@
 # %% [markdown]
 # ## Define Library
 
+import io
+import os
+import pickle
+import tempfile
+import time
+import uuid
+from datetime import datetime, timedelta
+from typing import Union
+
+import duckdb as dd
+import gcsfs
+import joblib
+import matplotlib.pyplot as plt
+import numpy as np
 # %%
 # %% [markdown]
 # # Jupyter Notebook Loading Header
@@ -13,26 +27,10 @@
 # %% [markdown]
 ## Import Libraries
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 import seaborn as sns
-from google.cloud import bigquery
-from google.cloud import storage
-import os
-import tempfile
-import time
-from datetime import datetime
-import uuid
-import joblib
-import uuid
+from google.cloud import bigquery, storage
 from sklearn.metrics import roc_auc_score
-from datetime import datetime, timedelta
-import gcsfs
-import duckdb as dd
-import pickle
-import joblib
-from typing import Union
-import io
+
 path = r'C:\Users\Dwaipayan\AppData\Roaming\gcloud\application_default_credentials.json'
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = path
 client = bigquery.Client(project='prj-prod-dataplatform')
@@ -40,6 +38,7 @@ os.environ["GOOGLE_CLOUD_PROJECT"] = "prj-prod-dataplatform"
 
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 # %% [markdown]
@@ -54,11 +53,12 @@ pd.set_option("Display.max_rows", 100)
 # %% [markdown]
 # ### calculate_periodic_gini_prod_ver_trench_dimfact
 
+from datetime import timedelta
+from itertools import combinations
+
+import numpy as np
 # %%
 import pandas as pd
-import numpy as np
-from itertools import combinations
-from datetime import timedelta
 from scipy.stats import rankdata
 
 
@@ -571,16 +571,6 @@ select * from prj-prod-dataplatform.dap_ds_poweruser_playground.dimension_credos
 """
 
 client.query(sq).result()
-
-# %%
-factalldf = pd.concat([df_f_fpd0_cicsil, df_f_fpd10_cicsil, df_f_fpd30_cicsil, df_f_fspd30_cicsil, df_f_fstpd30_cicsil,
-                    #    df_f_fpd0_alphacredosil, df_f_fpd10_alphacredosil, df_f_fpd30_alphacredosil, df_f_fspd30_alphacredosil, df_f_fstpd30_alphacredosil,
-                       df_f_fpd0_alphastacksil, df_f_fpd10_alphastacksil, df_f_fpd30_alphastacksil, df_f_fspd30_alphastacksil, df_f_fstpd30_alphastacksil,
-                       df_f_fpd0_appscoresil, df_f_fpd10_appscoresil, df_f_fpd30_appscoresil, df_f_fspd30_appscoresil, df_f_fstpd30_appscoresil,
-                       df_f_fpd0_betademoscoresil, df_f_fpd10_betademoscoresil, df_f_fpd30_betademoscoresil, df_f_fspd30_betademoscoresil, df_f_fstpd30_betademoscoresil,
-                       df_f_fpd0_betastackscoresil, df_f_fpd10_betastackscoresil, df_f_fpd30_betastackscoresil, df_f_fspd30_betastackscoresil, df_f_fstpd30_betastackscoresil,
-                       df_f_fpd0_betastackcredoscoresil, df_f_fpd10_betastackcredoscoresil, df_f_fpd30_betastackcredoscoresil, df_f_fspd30_betastackcredoscoresil, df_f_fstpd30_betastackcredoscoresil,
-                                  ], ignore_index=True)
 
 # %%
 sq = """

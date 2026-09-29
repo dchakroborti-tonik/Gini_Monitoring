@@ -4,6 +4,20 @@
 # %% [markdown]
 # ## Define Library
 
+import io
+import os
+import pickle
+import tempfile
+import time
+import uuid
+from datetime import datetime, timedelta
+from typing import Union
+
+import duckdb as dd
+import gcsfs
+import joblib
+import matplotlib.pyplot as plt
+import numpy as np
 # %%
 # %% [markdown]
 # # Jupyter Notebook Loading Header
@@ -13,32 +27,17 @@
 # %% [markdown]
 ## Import Libraries
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 import seaborn as sns
-from google.cloud import bigquery
-from google.cloud import storage
-import os
-import tempfile
-import time
-from datetime import datetime
-import uuid
-import joblib
-import uuid
+from google.cloud import bigquery, storage
 from sklearn.metrics import roc_auc_score
-from datetime import datetime, timedelta
-import gcsfs
-import duckdb as dd
-import pickle
-import joblib
-from typing import Union
-import io
+
 path = r'C:\Users\Dwaipayan\AppData\Roaming\gcloud\application_default_credentials.json'
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = path
 client = bigquery.Client(project='prj-prod-dataplatform')
 os.environ["GOOGLE_CLOUD_PROJECT"] = "prj-prod-dataplatform"
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 # %% [markdown]
@@ -85,10 +84,11 @@ def calculate_gini(scores, labels):
 # %% [markdown]
 # ### Gini Optimized
 
+from itertools import combinations
+
+import numpy as np
 # %%
 import pandas as pd
-import numpy as np
-from itertools import combinations
 from scipy.stats import rankdata
 
 
@@ -306,11 +306,12 @@ def calculate_periodic_gini_prod_ver_trench_dimfact(
 # %% [markdown]
 # ### Calculate Periodic Gini Duckdb
 
+from itertools import combinations
+
+import duckdb
+import numpy as np
 # %%
 import pandas as pd
-import numpy as np
-from itertools import combinations
-import duckdb
 
 
 def calculate_periodic_gini_duckdb(
@@ -481,13 +482,14 @@ def calculate_periodic_gini_duckdb(
 # %% [markdown]
 # ### Calculate Gini Multiprocessing
 
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor
+from itertools import combinations
+
+import numpy as np
 # %%
 import pandas as pd
-import numpy as np
-from itertools import combinations
 from scipy.stats import rankdata
-from concurrent.futures import ProcessPoolExecutor
-import multiprocessing as mp
 
 # ---- shared, read-only, per-worker state -----------------------------------
 # Populated in the PARENT process before the pool is created. On Linux
@@ -1098,7 +1100,7 @@ job.result()  # Wait for the job to complete
 # ### Test
 
 print(f"The shape of the dataframe downloaded is:\t {dfd[dfd['flg_mature_fspd_30']==1].shape}")
-dfd[dfd['flg_mature_f3pd_30']==1].head()
+dfd[dfd['flg_mature_fspd_30']==1].head()
 
 # %%
 df_concat = dfd[dfd['flg_mature_fspd_30']==1].copy()
@@ -1162,7 +1164,7 @@ job.result()  # Wait for the job to complete
 # ### Test
 
 print(f"The shape of the dataframe downloaded is:\t {dfd[dfd['flg_mature_fstpd_30']==1].shape}")
-dfd[dfd['flg_mature_fstpd_310']==1].head()
+dfd[dfd['flg_mature_fstpd_30']==1].head()
 
 # %%
 df_concat = dfd[dfd['flg_mature_fstpd_30']==1].copy()

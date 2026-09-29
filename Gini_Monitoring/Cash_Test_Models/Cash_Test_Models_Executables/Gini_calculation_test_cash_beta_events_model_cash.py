@@ -4,6 +4,20 @@
 # %% [markdown]
 # ## Define Library
 
+import io
+import os
+import pickle
+import tempfile
+import time
+import uuid
+from datetime import datetime, timedelta
+from typing import Union
+
+import duckdb as dd
+import gcsfs
+import joblib
+import matplotlib.pyplot as plt
+import numpy as np
 # %%
 # %% [markdown]
 # # Jupyter Notebook Loading Header
@@ -13,32 +27,17 @@
 # %% [markdown]
 ## Import Libraries
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 import seaborn as sns
-from google.cloud import bigquery
-from google.cloud import storage
-import os
-import tempfile
-import time
-from datetime import datetime
-import uuid
-import joblib
-import uuid
+from google.cloud import bigquery, storage
 from sklearn.metrics import roc_auc_score
-from datetime import datetime, timedelta
-import gcsfs
-import duckdb as dd
-import pickle
-import joblib
-from typing import Union
-import io
+
 path = r'C:\Users\Dwaipayan\AppData\Roaming\gcloud\application_default_credentials.json'
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = path
 client = bigquery.Client(project='prj-prod-dataplatform')
 os.environ["GOOGLE_CLOUD_PROJECT"] = "prj-prod-dataplatform"
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 # %% [markdown]
@@ -85,10 +84,11 @@ def calculate_gini(scores, labels):
 # %% [markdown]
 # ### Gini Optimized
 
+from itertools import combinations
+
+import numpy as np
 # %%
 import pandas as pd
-import numpy as np
-from itertools import combinations
 from scipy.stats import rankdata
 
 
@@ -306,11 +306,12 @@ def calculate_periodic_gini_prod_ver_trench_dimfact(
 # %% [markdown]
 # ### Calculate Periodic Gini Duckdb
 
+from itertools import combinations
+
+import duckdb
+import numpy as np
 # %%
 import pandas as pd
-import numpy as np
-from itertools import combinations
-import duckdb
 
 
 def calculate_periodic_gini_duckdb(
@@ -481,13 +482,14 @@ def calculate_periodic_gini_duckdb(
 # %% [markdown]
 # ### Calculate Gini Multiprocessing
 
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor
+from itertools import combinations
+
+import numpy as np
 # %%
 import pandas as pd
-import numpy as np
-from itertools import combinations
 from scipy.stats import rankdata
-from concurrent.futures import ProcessPoolExecutor
-import multiprocessing as mp
 
 # ---- shared, read-only, per-worker state -----------------------------------
 # Populated in the PARENT process before the pool is created. On Linux
@@ -861,7 +863,8 @@ base as
   del.deffspd30,
   del.flg_mature_fspd_30,
   del.deffstpd30,
-  del.flg_mature_fstpd_30,  loanmaster.new_loan_type,
+  del.flg_mature_fstpd_30,  
+  loanmaster.new_loan_type,
   modelVersionId, r.trenchCategory,
   case when r.trenchCategory in ('Trench 1', 'Trench 2') then 'New_Applicant' else 'Repeat_Applicant' end Application_type,
     case when loanmaster.loantype='BNPL' and store_type =1 then 'Appliance'
@@ -914,7 +917,7 @@ dfd.head()
 
 # %%
 df_concat = dfd.copy()
-del(dfd)
+
 
 # %%
 df_concat["prediction"] = pd.to_numeric(
@@ -1160,7 +1163,6 @@ print("Gini Calculation for beta_events_model_cash for FSPD30 completed")
 
 # ### FSTPD30
 
-
 # ### Test
 
 print(f"The shape of the dataframe downloaded fstpd30 is:\t {dfd[dfd['flg_mature_fstpd_30']==1].shape}")
@@ -1170,58 +1172,62 @@ dfd[dfd['flg_mature_fstpd_30']==1].head()
 df_concat = dfd[dfd['flg_mature_fstpd_30']==1].copy()
 
 # %%
-df_concat["prediction"] = pd.to_numeric(
+
+if len(df_concat) > 2:
+    df_concat["prediction"] = pd.to_numeric(
     df_concat["prediction"], errors="coerce"
-)
-print("Gini Calculation for beta_events_model_cash for FSTPD30 started")
-# %%
-fact_table, dimension_table = calculate_periodic_gini_prod_ver_trench_dimfact(
-    df_concat,
-    "prediction",
-    "deffstpd30",
-    "FSTPD30",
-    data_selection_column="Data_selection",
-    model_version_column="modelVersionId",
-    trench_column="trenchCategory",
-    loan_type_column="new_loan_type",
-    loan_product_type_column="loan_product_type",
-    ostype_column="osType",
-    apptype_column="Application_type",  # Add this
-    risk_segment_column="risk_segment",
-    risk_segment_final_column="risk_segment_final",
-    account_id_column="digitalLoanAccountId",
-)
+        )
+    print("Gini Calculation for beta_events_model_cash for FSTPD30 started")
+    # %%
+    fact_table, dimension_table = calculate_periodic_gini_prod_ver_trench_dimfact(
+        df_concat,
+        "prediction",
+        "deffstpd30",
+        "FSTPD30",
+        data_selection_column="Data_selection",
+        model_version_column="modelVersionId",
+        trench_column="trenchCategory",
+        loan_type_column="new_loan_type",
+        loan_product_type_column="loan_product_type",
+        ostype_column="osType",
+        apptype_column="Application_type",  # Add this
+        risk_segment_column="risk_segment",
+        risk_segment_final_column="risk_segment_final",
+        account_id_column="digitalLoanAccountId",
+    )
 
-# %%
-fact_table, dimension_table = update_tables(
-    fact_table, dimension_table, model_name="beta_events_model_cash", product="CASH"
-)
-print(f"The shape of the fact table is:\t {fact_table.shape}")
-print(f"The shape of the dimension table is:\t {dimension_table.shape}")
+    # %%
+    fact_table, dimension_table = update_tables(
+        fact_table, dimension_table, model_name="beta_events_model_cash", product="CASH"
+    )
+    print(f"The shape of the fact table is:\t {fact_table.shape}")
+    print(f"The shape of the dimension table is:\t {dimension_table.shape}")
 
-df_f_fstpd30_betaeventcash = fact_table.copy()
-df_d_fstpd30_betaeventcash = dimension_table.copy()
+    df_f_fstpd30_betaeventcash = fact_table.copy()
+    df_d_fstpd30_betaeventcash = dimension_table.copy()
 
-job_config = bigquery.LoadJobConfig(
-    write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
-)
-job = client.load_table_from_dataframe(df_f_fstpd30_betaeventcash, facttable_id, job_config=job_config)
-job.result()  # Wait for the job to complete
+    job_config = bigquery.LoadJobConfig(
+        write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
+    )
+    job = client.load_table_from_dataframe(df_f_fstpd30_betaeventcash, facttable_id, job_config=job_config)
+    job.result()  # Wait for the job to complete
 
-# %%
-# Upload to BigQuery
-# table_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.dimensi1on_table3"
-job_config = bigquery.LoadJobConfig(
-    write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
-)
-job = client.load_table_from_dataframe(
-    df_d_fstpd30_betaeventcash, dimtable_id, job_config=job_config
-)
-job.result()  # Wait for the job to complete
+    # %%
+    # Upload to BigQuery
+    # table_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.dimensi1on_table3"
+    job_config = bigquery.LoadJobConfig(
+        write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
+    )
+    job = client.load_table_from_dataframe(
+        df_d_fstpd30_betaeventcash, dimtable_id, job_config=job_config
+    )
+    job.result()  # Wait for the job to complete
 
-# %%
-print("Gini Calculation for beta_events_model_cash for FSTPD30 completed")
-print("beta_stack_model_cash gini calculation completed")
+    # %%
+    print("Gini Calculation for beta_events_model_cash for FSTPD30 completed")
+    print("beta_stack_model_cash gini calculation completed")
+else:
+    print("Not enough data for FSTPD30 gini calculation for beta_events_model_cash. Skipping this step.")
 
 
 # %% [markdown]
