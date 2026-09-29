@@ -534,6 +534,11 @@ def update_tables(
 # ###### Train
 
 # %%
+facttable_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.fact_cicsiltrain2"
+dimtable_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.dimension_cicsiltrain2"
+
+## FPD0
+
 sq = """
   with modelname as
   (
@@ -576,8 +581,16 @@ base as
   date(loanmaster.disbursementDateTime) disbursementdate,
   format_date('%Y-%m', coalesce(IF(loanmaster.new_loan_type = 'Flex-up', loanmaster.startApplyDateTime, loanmaster.termsAndConditionsSubmitDateTime),  cast(r.start_time as datetime))) as Application_month,
   Data_selection,
-    deffpd0,
-  flg_mature_fpd0,
+  del.deffpd0,
+  del.flg_mature_fpd0,
+  del.deffpd10,
+  del.flg_mature_fpd10,
+  del.deffpd30,
+  del.flg_mature_fpd30,
+  del.deffspd30,
+  del.flg_mature_fspd_30,
+  del.deffstpd30,
+  del.flg_mature_fstpd_30,
   loanmaster.new_loan_type,
   modelVersionId,
     trenchCategory,
@@ -614,17 +627,12 @@ dfd = client.query(sq).to_dataframe()
 # dfd = dfd.drop_duplicates(keep='first')
 print(f"The shape of the cic sil train dataframe downloaded is:\t {dfd.shape}")
 dfd.head()
-
-# %%
 df2 = dfd.copy()
-
-# %%
 df_concat = df2.copy()
 df_concat["Alpha_cic_sil_score"] = pd.to_numeric(df_concat["Alpha_cic_sil_score"], errors="coerce")
 df_concat['deffpd0'] = pd.to_numeric(df_concat['deffpd0'], errors='coerce')
 df_concat['flg_mature_fpd0'] = pd.to_numeric(df_concat['flg_mature_fpd0'], errors='coerce')
 
-# %%
 #### Calculating the Gini
 
 import time
@@ -650,26 +658,15 @@ fact_table, dimension_table = calculate_periodic_gini_prod_ver_trench_dimfact(
 end = time.perf_counter()
 print(f"To calculate cic sil fpd 0 Elapsed time: {(end - start)/60:.3f} minutes")
 
-
-# %%
 #### Updating Fact and Dimension Table
 fact_table, dimension_table = update_tables(fact_table, dimension_table, "cic_model_sil", "SIL")
 
-# %% [markdown]
-# #### Table names
-
-# %%
-facttable_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.fact_cicsiltrain2"
-dimtable_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.dimension_cicsiltrain2"
-
-# %%
 df_f_fpd0_cicsil = fact_table.copy()
 df_d_fpd0_cicsil = dimension_table.copy()
 
 print(f"The shape of fact table and copied dataframe are:\t {fact_table.shape} - {df_f_fpd0_cicsil.shape}")
 print(f"The shape of dimension table and copied dataframe are:\t {dimension_table.shape} - {df_d_fpd0_cicsil.shape}")
 
-# %%
 # table_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.fact_table3"
 job_config = bigquery.LoadJobConfig(
     write_disposition="WRITE_TRUNCATE",  # or "WRITE_APPEND"
@@ -688,99 +685,17 @@ job = client.load_table_from_dataframe(
 )
 job.result()  # Wait for the job to complete
 
-# %% [markdown]
-# #### FPD10
+## FPD10
 
-# %%
 #### Train
-sq = """
-  with modelname as
-  (SELECT
-    mmrd.customerId,mmrd.digitalLoanAccountId,prediction Alpha_cic_sil_score,start_time,end_time,modelDisplayName,modelVersionId,
-  case when trenchCategory is null then (case when mt.ln_user_type='1_Repeat Applicant' then 'Trench 3'
-    when mt.ln_user_type <>'1_Repeat Applicant' and DATE_DIFF(current_date(), mt.onb_tsa_onboarding_datetime, DAY) >30 then 'Trench 2'
-    else 'Trench1' end)
-     when trenchCategory = '' then (case when mt.ln_user_type='1_Repeat Applicant' then 'Trench 3'
-    when mt.ln_user_type <>'1_Repeat Applicant' and DATE_DIFF(current_date(), mt.onb_tsa_onboarding_datetime, DAY) >30 then 'Trench 2'
-    else 'Trench 1' end)
-    else trenchCategory end  as trenchCategory,
-    REPLACE(REPLACE(calcFeature, "'", '"'), "None", "null") AS calcFeature,
-    Data_selection,
-    deviceOs osType,
-  FROM prj-prod-dataplatform.dap_ds_poweruser_playground.ml_training_model_run_details_20260116 mmrd
-  left join prj-prod-dataplatform.risk_credit_mis.model_loan_score_mart mt on mt.digitalLoanAccountId = mmrd.digitalLoanAccountId
-  WHERE modelDisplayName in ('Alpha - CIC-SIL-Model', 'cic_model_sil', 'Sil-Alpha-CIC-SIL-Model')
-  ),
-  deliquency as
-(select loanAccountNumber,
-case when obs_min_inst_def0 >= 1 and min_inst_def0 = 1 then 1 else 0 end deffpd0,
-case when obs_min_inst_def10 >=1 and min_inst_def10 =1 then 1 else 0 end deffpd10,
-case when obs_min_inst_def30 >=1 and min_inst_def30 =1 then 1 else 0 end deffpd30,
-case when obs_min_inst_def30 >=2 and min_inst_def30 in (1,2) then 1 else 0 end deffspd30,
-case when obs_min_inst_def30 >=3 and min_inst_def30 in (1,2,3) then 1 else 0 end deffstpd30,
-case when obs_min_inst_def0 >= 1 then 1 else 0 end flg_mature_fpd0,
-case when obs_min_inst_def10 >=1 then 1 else 0 end flg_mature_fpd10,
-case when obs_min_inst_def30 >=1 then 1 else 0 end flg_mature_fpd30,
-case when obs_min_inst_def30 >=2 then 1 else 0 end flg_mature_fspd_30,
-case when obs_min_inst_def30 >=3 then 1 else 0 end flg_mature_fstpd_30
-from prj-prod-dataplatform.risk_credit_mis.loan_deliquency_data),
-base as
-(select distinct r.customerId,
-  r.digitalLoanAccountId,
-  loanmaster.loanAccountNumber,
-  r.modelDisplayName,
-  r.Alpha_cic_sil_score,
-  coalesce(IF(loanmaster.new_loan_type = 'Flex-up', loanmaster.startApplyDateTime, loanmaster.termsAndConditionsSubmitDateTime),  cast(r.start_time as datetime)) AS appln_submit_datetime,
-  date(loanmaster.disbursementDateTime) disbursementdate,
-  format_date('%Y-%m', coalesce(IF(loanmaster.new_loan_type = 'Flex-up', loanmaster.startApplyDateTime, loanmaster.termsAndConditionsSubmitDateTime),  cast(r.start_time as datetime))) as Application_month,
-  Data_selection,
-    del.deffpd10,
-  del.flg_mature_fpd10,
-  loanmaster.new_loan_type,
-  modelVersionId,
-    trenchCategory,
-    case when r.trenchCategory in ('Trench 1', 'Trench 2') then 'New_Applicant' else 'Repeat_Applicant' end Application_type,
-    case when loanmaster.loantype='BNPL' and store_type =1 then 'Appliance'
-    when loanmaster.loantype='BNPL' and store_type =2 then 'Mobile'
-    when loanmaster.loantype='BNPL' and store_type =3 then 'Mall'
-    when loanmaster.loantype='BNPL' and store_type not in (1,2,3) then store_tagging
-    else 'not applicable' end as loan_product_type,
-      coalesce((case when lower(r.osType) like '%andro%' then 'android'
-                  when lower(r.osType) like '%os%' then 'ios' else lower(r.osType) end),
-            (case when lower(coalesce(loanmaster.osversion_v2, loanmaster.osVersion)) like '%andro%' then 'android'
-                  when lower(coalesce(loanmaster.osversion_v2, loanmaster.osVersion)) like '%os%' then 'ios'
-                  when lower(loanmaster.deviceType) like '%andro%' then 'android'
-                  else 'ios' end)
-            ) as osType
-    from modelname r
-  left join risk_credit_mis.loan_master_table loanmaster  ON loanmaster.digitalLoanAccountId = r.digitalLoanAccountId
-  inner join deliquency del on del.loanAccountNumber = loanmaster.loanAccountNumber
-  left join(SELECT DISTINCT mer_refferal_code, mer_name mer_name,store_type,store_tagging FROM `dl_loans_db_raw.tdbk_merchant_refferal_mtb`
-  left join worktable_datachampions.TARGET_SPLIT P on P.STORE_NAME = mer_name
- qualify row_number() over(partition by mer_refferal_code order by  created_dt desc)=1) sil_category on loanmaster.purpleKey=sil_category.mer_refferal_code
-  where loanmaster.flagDisbursement = 1
-  and loanmaster.disbursementDateTime is not null
-  and r.Alpha_cic_sil_score is not null
-  and del.flg_mature_fpd10 = 1
-  )
-  select * from base
-  where data_selection not like '%Pre_Train%'
-  qualify row_number() over(partition by digitalLoanAccountId, modelVersionId order by appln_submit_datetime) = 1
-  ;
-  """
-dfd = client.query(sq).to_dataframe()
-# dfd = dfd.drop_duplicates(keep='first')
-print(f"The shape of the cic sil train fpd10 dataframe downloaded is:\t {dfd.shape}")
-dfd.head()
-
+print(f"The shape of the dataframe downloaded fpd10 is:\t {dfd[dfd['flg_mature_fpd10']==1].shape}")
+dfd[dfd['flg_mature_fpd10']==1].head()
 
 # %%
-df_concat = dfd.copy()
+df_concat = dfd[dfd['flg_mature_fpd10']==1].copy()
 
-# %%
 df_concat["Alpha_cic_sil_score"] = pd.to_numeric(df_concat["Alpha_cic_sil_score"], errors="coerce")
 
-# %%
 start = time.perf_counter()
 
 fact_table, dimension_table = calculate_periodic_gini_prod_ver_trench_dimfact(
@@ -800,18 +715,14 @@ fact_table, dimension_table = calculate_periodic_gini_prod_ver_trench_dimfact(
 
 end = time.perf_counter()
 print(f"To calculate cic sil fpd 10 Elapsed time: {(end - start)/60:.3f} minutes")
-
-# %%
 fact_table, dimension_table = update_tables(fact_table, dimension_table, model_name="cic_model_sil", product="SIL")
 
-# %%
 df_f_fpd10_cicsil = fact_table.copy()
 df_d_fpd10_cicsil = dimension_table.copy()
 
 print(f"The shape of fact table and copied dataframe are:\t {fact_table.shape} - {df_f_fpd10_cicsil.shape}")
 print(f"The shape of dimension table and copied dataframe are:\t {dimension_table.shape} - {df_d_fpd10_cicsil.shape}")
 
-# %%
 # table_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.fact_table3"
 job_config = bigquery.LoadJobConfig(
     write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
@@ -830,98 +741,16 @@ job = client.load_table_from_dataframe(
 )
 job.result()  # Wait for the job to complete
 
-# %% [markdown]
-# #### FPD30
+# FPD30
+
+print(f"The shape of the dataframe downloaded fpd30 is:\t {dfd[dfd['flg_mature_fpd30']==1].shape}")
+dfd[dfd['flg_mature_fpd30']==1].head()
 
 # %%
-sq = """
-  with modelname as
-  (SELECT
-    mmrd.customerId,mmrd.digitalLoanAccountId,prediction Alpha_cic_sil_score,start_time,end_time,modelDisplayName,modelVersionId,
-     case when trenchCategory is null then (case when mt.ln_user_type='1_Repeat Applicant' then 'Trench 3'
-    when mt.ln_user_type <>'1_Repeat Applicant' and DATE_DIFF(current_date(), mt.onb_tsa_onboarding_datetime, DAY) >30 then 'Trench 2'
-    else 'Trench1' end)
-     when trenchCategory = '' then (case when mt.ln_user_type='1_Repeat Applicant' then 'Trench 3'
-    when mt.ln_user_type <>'1_Repeat Applicant' and DATE_DIFF(current_date(), mt.onb_tsa_onboarding_datetime, DAY) >30 then 'Trench 2'
-    else 'Trench 1' end)
-    else trenchCategory end  as trenchCategory,
-    REPLACE(REPLACE(calcFeature, "'", '"'), "None", "null") AS calcFeature,
-    Data_selection,
-    deviceOs osType,
-  FROM prj-prod-dataplatform.dap_ds_poweruser_playground.ml_training_model_run_details_20260116 mmrd
-  left join prj-prod-dataplatform.risk_credit_mis.model_loan_score_mart mt on mt.digitalLoanAccountId = mmrd.digitalLoanAccountId
-  WHERE modelDisplayName in ('Alpha - CIC-SIL-Model', 'cic_model_sil', 'Sil-Alpha-CIC-SIL-Model')
-  ),
-  deliquency as
-(select loanAccountNumber,
-case when obs_min_inst_def0 >= 1 and min_inst_def0 = 1 then 1 else 0 end deffpd0,
-case when obs_min_inst_def10 >=1 and min_inst_def10 =1 then 1 else 0 end deffpd10,
-case when obs_min_inst_def30 >=1 and min_inst_def30 =1 then 1 else 0 end deffpd30,
-case when obs_min_inst_def30 >=2 and min_inst_def30 in (1,2) then 1 else 0 end deffspd30,
-case when obs_min_inst_def30 >=3 and min_inst_def30 in (1,2,3) then 1 else 0 end deffstpd30,
-case when obs_min_inst_def0 >= 1 then 1 else 0 end flg_mature_fpd0,
-case when obs_min_inst_def10 >=1 then 1 else 0 end flg_mature_fpd10,
-case when obs_min_inst_def30 >=1 then 1 else 0 end flg_mature_fpd30,
-case when obs_min_inst_def30 >=2 then 1 else 0 end flg_mature_fspd_30,
-case when obs_min_inst_def30 >=3 then 1 else 0 end flg_mature_fstpd_30
-from prj-prod-dataplatform.risk_credit_mis.loan_deliquency_data),
-base as
-(select distinct r.customerId,
-  r.digitalLoanAccountId,
-  loanmaster.loanAccountNumber,
-  r.modelDisplayName,
-  r.Alpha_cic_sil_score,
-  coalesce(IF(loanmaster.new_loan_type = 'Flex-up', loanmaster.startApplyDateTime, loanmaster.termsAndConditionsSubmitDateTime),  cast(r.start_time as datetime)) AS appln_submit_datetime,
-  date(loanmaster.disbursementDateTime) disbursementdate,
-  format_date('%Y-%m', coalesce(IF(loanmaster.new_loan_type = 'Flex-up', loanmaster.startApplyDateTime, loanmaster.termsAndConditionsSubmitDateTime),  cast(r.start_time as datetime))) as Application_month,
-  Data_selection,
-    del.deffpd30,
-  del.flg_mature_fpd30,
-  loanmaster.new_loan_type,
-  modelVersionId,
-    trenchCategory,
-    case when r.trenchCategory in ('Trench 1', 'Trench 2') then 'New_Applicant' else 'Repeat_Applicant' end Application_type,
-    case when loanmaster.loantype='BNPL' and store_type =1 then 'Appliance'
-    when loanmaster.loantype='BNPL' and store_type =2 then 'Mobile'
-    when loanmaster.loantype='BNPL' and store_type =3 then 'Mall'
-    when loanmaster.loantype='BNPL' and store_type not in (1,2,3) then store_tagging
-    else 'not applicable' end as loan_product_type,
-       coalesce((case when lower(r.osType) like '%andro%' then 'android'
-                  when lower(r.osType) like '%os%' then 'ios' else lower(r.osType) end),
-            (case when lower(coalesce(loanmaster.osversion_v2, loanmaster.osVersion)) like '%andro%' then 'android'
-                  when lower(coalesce(loanmaster.osversion_v2, loanmaster.osVersion)) like '%os%' then 'ios'
-                  when lower(loanmaster.deviceType) like '%andro%' then 'android'
-                  else 'ios' end)
-            ) as osType
-    from modelname r
-  left join risk_credit_mis.loan_master_table loanmaster  ON loanmaster.digitalLoanAccountId = r.digitalLoanAccountId
-  inner join deliquency del on del.loanAccountNumber = loanmaster.loanAccountNumber
-  left join(SELECT DISTINCT mer_refferal_code, mer_name mer_name,store_type,store_tagging FROM `dl_loans_db_raw.tdbk_merchant_refferal_mtb`
-  left join worktable_datachampions.TARGET_SPLIT P on P.STORE_NAME = mer_name
- qualify row_number() over(partition by mer_refferal_code order by  created_dt desc)=1) sil_category on loanmaster.purpleKey=sil_category.mer_refferal_code
-  where loanmaster.flagDisbursement = 1
-  and loanmaster.disbursementDateTime is not null
-  and r.Alpha_cic_sil_score is not null
-  and del.flg_mature_fpd30 = 1
-  )
-  select * from base
-  where data_selection not like '%Pre_Train%'
-  qualify row_number() over(partition by digitalLoanAccountId, modelVersionId order by appln_submit_datetime) = 1
-  ;
-  """
-dfd = client.query(sq).to_dataframe()
-# dfd = dfd.drop_duplicates(keep='first')
-print(f"The shape of the cic train fpd30 dataframe downloaded is:\t {dfd.shape}")
-dfd.head()
-
-
-# %%
-df_concat = dfd.copy()
+df_concat = dfd[dfd['flg_mature_fpd30']==1].copy()
 df_concat["Alpha_cic_sil_score"] = pd.to_numeric(df_concat["Alpha_cic_sil_score"], errors="coerce")
 df_concat['deffpd30'] = pd.to_numeric(df_concat['deffpd30'], errors='coerce')
 df_concat['flg_mature_fpd30'] = pd.to_numeric(df_concat['flg_mature_fpd30'], errors='coerce')
-
-# %%
 start = time.perf_counter()
 fact_table, dimension_table = calculate_periodic_gini_prod_ver_trench_dimfact(
     df_concat,
@@ -940,18 +769,12 @@ fact_table, dimension_table = calculate_periodic_gini_prod_ver_trench_dimfact(
 
 end = time.perf_counter()
 print(f"To calculate cic sil fpd 0 Elapsed time: {(end - start)/60:.3f} minutes")
-
-# %%
 fact_table, dimension_table = update_tables(fact_table, dimension_table, model_name="cic_model_sil", product="SIL")
-
-# %%
 df_f_fpd30_cicsil = fact_table.copy()
 df_d_fpd30_cicsil = dimension_table.copy()
 
 print(f"The shape of fact table and copied dataframe are:\t {fact_table.shape} - {df_f_fpd30_cicsil.shape}")
 print(f"The shape of dimension table and copied dataframe are:\t {dimension_table.shape} - {df_d_fpd30_cicsil.shape}")
-
-# %%
 # table_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.fact_table3"
 job_config = bigquery.LoadJobConfig(
     write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
@@ -969,98 +792,15 @@ job = client.load_table_from_dataframe(
     df_d_fpd30_cicsil, dimtable_id, job_config=job_config
 )
 job.result()  # Wait for the job to complete
-
-# %% [markdown]
-# #### FSPD30
-
-# %%
-sq = """
-  with modelname as
-  (SELECT
-    mmrd.customerId,mmrd.digitalLoanAccountId,prediction Alpha_cic_sil_score,start_time,end_time,modelDisplayName,modelVersionId,
-   case when trenchCategory is null then (case when mt.ln_user_type='1_Repeat Applicant' then 'Trench 3'
-    when mt.ln_user_type <>'1_Repeat Applicant' and DATE_DIFF(current_date(), mt.onb_tsa_onboarding_datetime, DAY) >30 then 'Trench 2'
-    else 'Trench1' end)
-     when trenchCategory = '' then (case when mt.ln_user_type='1_Repeat Applicant' then 'Trench 3'
-    when mt.ln_user_type <>'1_Repeat Applicant' and DATE_DIFF(current_date(), mt.onb_tsa_onboarding_datetime, DAY) >30 then 'Trench 2'
-    else 'Trench 1' end)
-    else trenchCategory end  as trenchCategory,
-    REPLACE(REPLACE(calcFeature, "'", '"'), "None", "null") AS calcFeature,
-    Data_selection,
-    deviceOs osType,
-  FROM prj-prod-dataplatform.dap_ds_poweruser_playground.ml_training_model_run_details_20260116 mmrd
-  left join prj-prod-dataplatform.risk_credit_mis.model_loan_score_mart mt on mt.digitalLoanAccountId = mmrd.digitalLoanAccountId
-  WHERE modelDisplayName in ('Alpha - CIC-SIL-Model', 'cic_model_sil', 'Sil-Alpha-CIC-SIL-Model')
-  ),
-  deliquency as
-(select loanAccountNumber,
-case when obs_min_inst_def0 >= 1 and min_inst_def0 = 1 then 1 else 0 end deffpd0,
-case when obs_min_inst_def10 >=1 and min_inst_def10 =1 then 1 else 0 end deffpd10,
-case when obs_min_inst_def30 >=1 and min_inst_def30 =1 then 1 else 0 end deffpd30,
-case when obs_min_inst_def30 >=2 and min_inst_def30 in (1,2) then 1 else 0 end deffspd30,
-case when obs_min_inst_def30 >=3 and min_inst_def30 in (1,2,3) then 1 else 0 end deffstpd30,
-case when obs_min_inst_def0 >= 1 then 1 else 0 end flg_mature_fpd0,
-case when obs_min_inst_def10 >=1 then 1 else 0 end flg_mature_fpd10,
-case when obs_min_inst_def30 >=1 then 1 else 0 end flg_mature_fpd30,
-case when obs_min_inst_def30 >=2 then 1 else 0 end flg_mature_fspd_30,
-case when obs_min_inst_def30 >=3 then 1 else 0 end flg_mature_fstpd_30
-from prj-prod-dataplatform.risk_credit_mis.loan_deliquency_data),
-base as
-(select distinct r.customerId,
-  r.digitalLoanAccountId,
-  loanmaster.loanAccountNumber,
-  r.modelDisplayName,
-  r.Alpha_cic_sil_score,
-  coalesce(IF(loanmaster.new_loan_type = 'Flex-up', loanmaster.startApplyDateTime, loanmaster.termsAndConditionsSubmitDateTime),  cast(r.start_time as datetime)) AS appln_submit_datetime,
-  date(loanmaster.disbursementDateTime) disbursementdate,
-  format_date('%Y-%m', coalesce(IF(loanmaster.new_loan_type = 'Flex-up', loanmaster.startApplyDateTime, loanmaster.termsAndConditionsSubmitDateTime),  cast(r.start_time as datetime))) as Application_month,
-  Data_selection,
-    del.deffspd30,
-  del.flg_mature_fspd_30,
-  loanmaster.new_loan_type,
-  modelVersionId,
-    trenchCategory,
-    case when r.trenchCategory in ('Trench 1', 'Trench 2') then 'New_Applicant' else 'Repeat_Applicant' end Application_type,
-    case when loanmaster.loantype='BNPL' and store_type =1 then 'Appliance'
-    when loanmaster.loantype='BNPL' and store_type =2 then 'Mobile'
-    when loanmaster.loantype='BNPL' and store_type =3 then 'Mall'
-    when loanmaster.loantype='BNPL' and store_type not in (1,2,3) then store_tagging
-    else 'not applicable' end as loan_product_type,
-     coalesce((case when lower(r.osType) like '%andro%' then 'android'
-                  when lower(r.osType) like '%os%' then 'ios' else lower(r.osType) end),
-            (case when lower(coalesce(loanmaster.osversion_v2, loanmaster.osVersion)) like '%andro%' then 'android'
-                  when lower(coalesce(loanmaster.osversion_v2, loanmaster.osVersion)) like '%os%' then 'ios'
-                  when lower(loanmaster.deviceType) like '%andro%' then 'android'
-                  else 'ios' end)
-            ) as osType
-    from modelname r
-  left join risk_credit_mis.loan_master_table loanmaster  ON loanmaster.digitalLoanAccountId = r.digitalLoanAccountId
-  inner join deliquency del on del.loanAccountNumber = loanmaster.loanAccountNumber
-  left join(SELECT DISTINCT mer_refferal_code, mer_name mer_name,store_type,store_tagging FROM `dl_loans_db_raw.tdbk_merchant_refferal_mtb`
-  left join worktable_datachampions.TARGET_SPLIT P on P.STORE_NAME = mer_name
- qualify row_number() over(partition by mer_refferal_code order by  created_dt desc)=1) sil_category on loanmaster.purpleKey=sil_category.mer_refferal_code
-  where loanmaster.flagDisbursement = 1
-  and loanmaster.disbursementDateTime is not null
-  and r.Alpha_cic_sil_score is not null
-  and del.flg_mature_fspd_30 = 1
-  )
-  select * from base
-  where data_selection not like '%Pre_Train%'
-  qualify row_number() over(partition by digitalLoanAccountId, modelVersionId order by appln_submit_datetime) = 1
-  ;
-  """
-dfd = client.query(sq).to_dataframe()
-# dfd = dfd.drop_duplicates(keep='first')
-print(f"The shape of the cic sil fspd30 train dataframe downloaded is:\t {dfd.shape}")
-dfd.head()
+#### FSPD30
+print(f"The shape of the dataframe downloaded fspd30 is:\t {dfd[dfd['flg_mature_fspd_30']==1].shape}")
+dfd[dfd['flg_mature_fspd_30']==1].head()
 
 # %%
-df_concat = dfd.copy()
+df_concat = dfd[dfd['flg_mature_fspd_30']==1].copy()
 df_concat["Alpha_cic_sil_score"] = pd.to_numeric(df_concat["Alpha_cic_sil_score"], errors="coerce")
 df_concat['deffspd30'] = pd.to_numeric(df_concat['deffspd30'], errors='coerce')
 df_concat['flg_mature_fspd_30'] = pd.to_numeric(df_concat['flg_mature_fspd_30'], errors='coerce')
-
-# %%
 start = time.perf_counter()
 
 fact_table, dimension_table = calculate_periodic_gini_prod_ver_trench_dimfact(
@@ -1081,18 +821,12 @@ fact_table, dimension_table = calculate_periodic_gini_prod_ver_trench_dimfact(
 end = time.perf_counter()
 print(f"To calculate cic sil fpd 0 Elapsed time: {(end - start)/60:.3f} minutes")
 
-
-# %%
 fact_table, dimension_table = update_tables(fact_table, dimension_table, model_name="cic_model_sil", product="SIL")
-
-# %%
 df_f_fspd30_cicsil = fact_table.copy()
 df_d_fspd30_cicsil = dimension_table.copy()
 
 print(f"The shape of fact table and copied dataframe are:\t {fact_table.shape} - {df_f_fspd30_cicsil.shape}")
 print(f"The shape of dimension table and copied dataframe are:\t {dimension_table.shape} - {df_d_fspd30_cicsil.shape}")
-
-# %%
 # table_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.fact_table3"
 job_config = bigquery.LoadJobConfig(
     write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
@@ -1110,99 +844,15 @@ job = client.load_table_from_dataframe(
     df_d_fspd30_cicsil, dimtable_id, job_config=job_config
 )
 job.result()  # Wait for the job to complete
-
-# %% [markdown]
-# #### FSTPD30
-
-# %%
-sq = """
-  with modelname as
-  (  SELECT
-    mmrd.customerId,mmrd.digitalLoanAccountId,prediction Alpha_cic_sil_score,start_time,end_time,modelDisplayName,modelVersionId,
-   case when trenchCategory is null then (case when mt.ln_user_type='1_Repeat Applicant' then 'Trench 3'
-    when mt.ln_user_type <>'1_Repeat Applicant' and DATE_DIFF(current_date(), mt.onb_tsa_onboarding_datetime, DAY) >30 then 'Trench 2'
-    else 'Trench1' end)
-     when trenchCategory = '' then (case when mt.ln_user_type='1_Repeat Applicant' then 'Trench 3'
-    when mt.ln_user_type <>'1_Repeat Applicant' and DATE_DIFF(current_date(), mt.onb_tsa_onboarding_datetime, DAY) >30 then 'Trench 2'
-    else 'Trench 1' end)
-    else trenchCategory end  as trenchCategory,
-    REPLACE(REPLACE(calcFeature, "'", '"'), "None", "null") AS calcFeature,
-    Data_selection,
-    deviceOs osType,
-  FROM prj-prod-dataplatform.dap_ds_poweruser_playground.ml_training_model_run_details_20260116 mmrd
-  left join prj-prod-dataplatform.risk_credit_mis.model_loan_score_mart mt on mt.digitalLoanAccountId = mmrd.digitalLoanAccountId
-  WHERE modelDisplayName in ('Alpha - CIC-SIL-Model', 'cic_model_sil', 'Sil-Alpha-CIC-SIL-Model')
-  ),
-  deliquency as
-(select loanAccountNumber,
-case when obs_min_inst_def0 >= 1 and min_inst_def0 = 1 then 1 else 0 end deffpd0,
-case when obs_min_inst_def10 >=1 and min_inst_def10 =1 then 1 else 0 end deffpd10,
-case when obs_min_inst_def30 >=1 and min_inst_def30 =1 then 1 else 0 end deffpd30,
-case when obs_min_inst_def30 >=2 and min_inst_def30 in (1,2) then 1 else 0 end deffspd30,
-case when obs_min_inst_def30 >=3 and min_inst_def30 in (1,2,3) then 1 else 0 end deffstpd30,
-case when obs_min_inst_def0 >= 1 then 1 else 0 end flg_mature_fpd0,
-case when obs_min_inst_def10 >=1 then 1 else 0 end flg_mature_fpd10,
-case when obs_min_inst_def30 >=1 then 1 else 0 end flg_mature_fpd30,
-case when obs_min_inst_def30 >=2 then 1 else 0 end flg_mature_fspd_30,
-case when obs_min_inst_def30 >=3 then 1 else 0 end flg_mature_fstpd_30
-from prj-prod-dataplatform.risk_credit_mis.loan_deliquency_data),
-base as
-(select distinct r.customerId,
-  r.digitalLoanAccountId,
-  loanmaster.loanAccountNumber,
-  r.modelDisplayName,
-  r.Alpha_cic_sil_score,
-  coalesce(IF(loanmaster.new_loan_type = 'Flex-up', loanmaster.startApplyDateTime, loanmaster.termsAndConditionsSubmitDateTime),  cast(r.start_time as datetime)) AS appln_submit_datetime,
-  date(loanmaster.disbursementDateTime) disbursementdate,
-  format_date('%Y-%m', coalesce(IF(loanmaster.new_loan_type = 'Flex-up', loanmaster.startApplyDateTime, loanmaster.termsAndConditionsSubmitDateTime),  cast(r.start_time as datetime))) as Application_month,
-   Data_selection,
-    del.deffstpd30,
-  del.flg_mature_fstpd_30,
-  loanmaster.new_loan_type,
-  modelVersionId,
-    trenchCategory,
-    case when r.trenchCategory in ('Trench 1', 'Trench 2') then 'New_Applicant' else 'Repeat_Applicant' end Application_type,
-    case when loanmaster.loantype='BNPL' and store_type =1 then 'Appliance'
-    when loanmaster.loantype='BNPL' and store_type =2 then 'Mobile'
-    when loanmaster.loantype='BNPL' and store_type =3 then 'Mall'
-    when loanmaster.loantype='BNPL' and store_type not in (1,2,3) then store_tagging
-    else 'not applicable' end as loan_product_type,
-       coalesce((case when lower(r.osType) like '%andro%' then 'android'
-                  when lower(r.osType) like '%os%' then 'ios' else lower(r.osType) end),
-            (case when lower(coalesce(loanmaster.osversion_v2, loanmaster.osVersion)) like '%andro%' then 'android'
-                  when lower(coalesce(loanmaster.osversion_v2, loanmaster.osVersion)) like '%os%' then 'ios'
-                  when lower(loanmaster.deviceType) like '%andro%' then 'android'
-                  else 'ios' end)
-            ) as osType
-    from modelname r
-  left join risk_credit_mis.loan_master_table loanmaster  ON loanmaster.digitalLoanAccountId = r.digitalLoanAccountId
-  inner join deliquency del on del.loanAccountNumber = loanmaster.loanAccountNumber
-  left join(SELECT DISTINCT mer_refferal_code, mer_name mer_name,store_type,store_tagging FROM `dl_loans_db_raw.tdbk_merchant_refferal_mtb`
-  left join worktable_datachampions.TARGET_SPLIT P on P.STORE_NAME = mer_name
- qualify row_number() over(partition by mer_refferal_code order by  created_dt desc)=1) sil_category on loanmaster.purpleKey=sil_category.mer_refferal_code
-  where loanmaster.flagDisbursement = 1
-  and loanmaster.disbursementDateTime is not null
-  and r.Alpha_cic_sil_score is not null
-  and del.flg_mature_fstpd_30 = 1
-  )
-  select * from base
-  where data_selection not like '%Pre_Train%'
-  qualify row_number() over(partition by digitalLoanAccountId, modelVersionId order by appln_submit_datetime) = 1
-  ;
-  """
-dfd = client.query(sq).to_dataframe()
-# dfd = dfd.drop_duplicates(keep='first')
-print(f"The shape of the cic sil fstpd30 train dataframe downloaded is:\t {dfd.shape}")
-dfd.head()
-
+#### FSTPD30
+print(f"The shape of the dataframe downloaded fstpd30 is:\t {dfd[dfd['flg_mature_fstpd_30']==1].shape}")
+dfd[dfd['flg_mature_fstpd_30']==1].head()
 
 # %%
-df_concat = dfd.copy()
+df_concat = dfd[dfd['flg_mature_fstpd_30']==1].copy()
 df_concat["Alpha_cic_sil_score"] = pd.to_numeric( df_concat["Alpha_cic_sil_score"], errors="coerce")
 df_concat['deffstpd30'] = pd.to_numeric(df_concat['deffstpd30'], errors='coerce')
 df_concat['flg_mature_fstpd_30'] = pd.to_numeric(df_concat['flg_mature_fstpd_30'], errors='coerce')
-
-# %%
 
 start = time.perf_counter()
 fact_table, dimension_table = calculate_periodic_gini_prod_ver_trench_dimfact(
@@ -1222,18 +872,12 @@ fact_table, dimension_table = calculate_periodic_gini_prod_ver_trench_dimfact(
 end = time.perf_counter()
 print(f"To calculate cic sil fpd 0 Elapsed time: {(end - start)/60:.3f} minutes")
 
-
-# %%
 fact_table, dimension_table = update_tables(fact_table, dimension_table, model_name="cic_model_sil", product="SIL")
-
-# %%
 df_f_fstpd30_cicsil = fact_table.copy()
 df_d_fstpd30_cicsil = dimension_table.copy()
 
 print(f"The shape of fact table and copied dataframe are:\t {fact_table.shape} - {df_f_fstpd30_cicsil.shape}")
 print(f"The shape of dimension table and copied dataframe are:\t {dimension_table.shape} - {df_d_fstpd30_cicsil.shape}")
-
-# %%
 # table_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.fact_table3"
 job_config = bigquery.LoadJobConfig(
     write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
@@ -1251,13 +895,745 @@ job = client.load_table_from_dataframe(
     df_d_fstpd30_cicsil, dimtable_id, job_config=job_config
 )
 job.result()  # Wait for the job to complete
-
-# %%
 df_fact_cic_sil = pd.concat([df_f_fpd0_cicsil, df_f_fpd10_cicsil, df_f_fpd30_cicsil, df_f_fspd30_cicsil, df_f_fstpd30_cicsil], ignore_index = True)
 df_dim_cic_sil = pd.concat([df_d_fpd0_cicsil, df_d_fpd10_cicsil, df_d_fpd30_cicsil, df_d_fspd30_cicsil, df_d_fstpd30_cicsil], ignore_index = True)
 
+
+
+# %%
+
+
 # %% [markdown]
 # # 🪦💀 Graveyard
+
+# %% [markdown]
+# #### cic_model_sil
+
+# %% [markdown]
+# ###### Train
+
+# %%
+# sq = """
+#   with modelname as
+#   (
+#    SELECT
+#     mmrd.customerId,mmrd.digitalLoanAccountId,prediction Alpha_cic_sil_score,start_time,end_time,modelDisplayName,modelVersionId,
+#     case when trenchCategory is null then (case when mt.ln_user_type='1_Repeat Applicant' then 'Trench 3'
+#     when mt.ln_user_type <>'1_Repeat Applicant' and DATE_DIFF(current_date(), mt.onb_tsa_onboarding_datetime, DAY) >30 then 'Trench 2'
+#     else 'Trench1' end)
+#      when trenchCategory = '' then (case when mt.ln_user_type='1_Repeat Applicant' then 'Trench 3'
+#     when mt.ln_user_type <>'1_Repeat Applicant' and DATE_DIFF(current_date(), mt.onb_tsa_onboarding_datetime, DAY) >30 then 'Trench 2'
+#     else 'Trench 1' end)
+#     else trenchCategory end  as trenchCategory,
+#     REPLACE(REPLACE(calcFeature, "'", '"'), "None", "null") AS calcFeature,
+#     Data_selection,
+#     deviceOs osType,
+#   FROM prj-prod-dataplatform.dap_ds_poweruser_playground.ml_training_model_run_details_20260116 mmrd
+#   left join prj-prod-dataplatform.risk_credit_mis.model_loan_score_mart mt on mt.digitalLoanAccountId = mmrd.digitalLoanAccountId
+#   WHERE modelDisplayName in ('Alpha - CIC-SIL-Model', 'cic_model_sil', 'Sil-Alpha-CIC-SIL-Model')
+#   ),
+#   deliquency as
+# (select loanAccountNumber,
+# case when obs_min_inst_def0 >= 1 and min_inst_def0 = 1 then 1 else 0 end deffpd0,
+# case when obs_min_inst_def10 >=1 and min_inst_def10 =1 then 1 else 0 end deffpd10,
+# case when obs_min_inst_def30 >=1 and min_inst_def30 =1 then 1 else 0 end deffpd30,
+# case when obs_min_inst_def30 >=2 and min_inst_def30 in (1,2) then 1 else 0 end deffspd30,
+# case when obs_min_inst_def30 >=3 and min_inst_def30 in (1,2,3) then 1 else 0 end deffstpd30,
+# case when obs_min_inst_def0 >= 1 then 1 else 0 end flg_mature_fpd0,
+# case when obs_min_inst_def10 >=1 then 1 else 0 end flg_mature_fpd10,
+# case when obs_min_inst_def30 >=1 then 1 else 0 end flg_mature_fpd30,
+# case when obs_min_inst_def30 >=2 then 1 else 0 end flg_mature_fspd_30,
+# case when obs_min_inst_def30 >=3 then 1 else 0 end flg_mature_fstpd_30
+# from prj-prod-dataplatform.risk_credit_mis.loan_deliquency_data),
+# base as
+# (select distinct r.customerId,
+#   r.digitalLoanAccountId,
+#   loanmaster.loanAccountNumber,
+#   r.modelDisplayName,
+#   r.Alpha_cic_sil_score,
+#   coalesce(IF(loanmaster.new_loan_type = 'Flex-up', loanmaster.startApplyDateTime, loanmaster.termsAndConditionsSubmitDateTime),  cast(r.start_time as datetime)) AS appln_submit_datetime,
+#   date(loanmaster.disbursementDateTime) disbursementdate,
+#   format_date('%Y-%m', coalesce(IF(loanmaster.new_loan_type = 'Flex-up', loanmaster.startApplyDateTime, loanmaster.termsAndConditionsSubmitDateTime),  cast(r.start_time as datetime))) as Application_month,
+#   Data_selection,
+#     deffpd0,
+#   flg_mature_fpd0,
+#   loanmaster.new_loan_type,
+#   modelVersionId,
+#     trenchCategory,
+#     case when r.trenchCategory in ('Trench 1', 'Trench 2') then 'New_Applicant' else 'Repeat_Applicant' end Application_type,
+#     case when loanmaster.loantype='BNPL' and store_type =1 then 'Appliance'
+#     when loanmaster.loantype='BNPL' and store_type =2 then 'Mobile'
+#     when loanmaster.loantype='BNPL' and store_type =3 then 'Mall'
+#     when loanmaster.loantype='BNPL' and store_type not in (1,2,3) then store_tagging
+#     else 'not applicable' end as loan_product_type,
+#         coalesce((case when lower(r.osType) like '%andro%' then 'android'
+#                   when lower(r.osType) like '%os%' then 'ios' else lower(r.osType) end),
+#             (case when lower(coalesce(loanmaster.osversion_v2, loanmaster.osVersion)) like '%andro%' then 'android'
+#                   when lower(coalesce(loanmaster.osversion_v2, loanmaster.osVersion)) like '%os%' then 'ios'
+#                   when lower(loanmaster.deviceType) like '%andro%' then 'android'
+#                   else 'ios' end)
+#             ) as osType
+#     from modelname r
+#   left join risk_credit_mis.loan_master_table loanmaster  ON loanmaster.digitalLoanAccountId = r.digitalLoanAccountId
+#   inner join deliquency del on del.loanAccountNumber = loanmaster.loanAccountNumber
+#   left join(SELECT DISTINCT mer_refferal_code, mer_name mer_name,store_type,store_tagging FROM `dl_loans_db_raw.tdbk_merchant_refferal_mtb`
+#   left join worktable_datachampions.TARGET_SPLIT P on P.STORE_NAME = mer_name
+#  qualify row_number() over(partition by mer_refferal_code order by  created_dt desc)=1) sil_category on loanmaster.purpleKey=sil_category.mer_refferal_code
+#   where loanmaster.flagDisbursement = 1
+#   and loanmaster.disbursementDateTime is not null
+#   and r.Alpha_cic_sil_score is not null
+#   and flg_mature_fpd0 = 1
+#   )
+#   select * from base
+#   where data_selection not like '%Pre_Train%'
+#   qualify row_number() over(partition by digitalLoanAccountId, modelVersionId order by appln_submit_datetime) = 1
+#   ;
+#   """
+# dfd = client.query(sq).to_dataframe()
+# # dfd = dfd.drop_duplicates(keep='first')
+# print(f"The shape of the cic sil train dataframe downloaded is:\t {dfd.shape}")
+# dfd.head()
+
+# %%
+# df2 = dfd.copy()
+
+# %%
+# df_concat = df2.copy()
+# df_concat["Alpha_cic_sil_score"] = pd.to_numeric(df_concat["Alpha_cic_sil_score"], errors="coerce")
+# df_concat['deffpd0'] = pd.to_numeric(df_concat['deffpd0'], errors='coerce')
+# df_concat['flg_mature_fpd0'] = pd.to_numeric(df_concat['flg_mature_fpd0'], errors='coerce')
+
+# %%
+# #### Calculating the Gini
+
+# import time
+
+# start = time.perf_counter()
+
+# fact_table, dimension_table = calculate_periodic_gini_prod_ver_trench_dimfact(
+#     df_concat,
+#     "Alpha_cic_sil_score",
+#     "deffpd0",
+#     "FPD0",
+#     data_selection_column="Data_selection",
+#     model_version_column="modelVersionId",
+#     trench_column="trenchCategory",
+#     loan_type_column="new_loan_type",
+#     loan_product_type_column="loan_product_type",
+#     ostype_column="osType",  # Add this
+#     apptype_column="Application_type",  # Add this
+#     account_id_column="digitalLoanAccountId",
+# )
+
+
+# end = time.perf_counter()
+# print(f"To calculate cic sil fpd 0 Elapsed time: {(end - start)/60:.3f} minutes")
+
+
+# %%
+# #### Updating Fact and Dimension Table
+# fact_table, dimension_table = update_tables(fact_table, dimension_table, "cic_model_sil", "SIL")
+
+# %% [markdown]
+# #### Table names
+
+# %%
+# facttable_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.fact_cicsiltrain2"
+# dimtable_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.dimension_cicsiltrain2"
+
+# %%
+# df_f_fpd0_cicsil = fact_table.copy()
+# df_d_fpd0_cicsil = dimension_table.copy()
+
+# print(f"The shape of fact table and copied dataframe are:\t {fact_table.shape} - {df_f_fpd0_cicsil.shape}")
+# print(f"The shape of dimension table and copied dataframe are:\t {dimension_table.shape} - {df_d_fpd0_cicsil.shape}")
+
+# %%
+# # table_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.fact_table3"
+# job_config = bigquery.LoadJobConfig(
+#     write_disposition="WRITE_TRUNCATE",  # or "WRITE_APPEND"
+# )
+# job = client.load_table_from_dataframe(df_f_fpd0_cicsil, facttable_id, job_config=job_config)
+# job.result()  # Wait for the job to complete
+
+# # %%
+# # Upload to BigQuery
+# # table_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.dimension_table3"
+# job_config = bigquery.LoadJobConfig(
+#     write_disposition="WRITE_TRUNCATE",  # or "WRITE_APPEND"
+# )
+# job = client.load_table_from_dataframe(
+#     df_d_fpd0_cicsil, dimtable_id, job_config=job_config
+# )
+# job.result()  # Wait for the job to complete
+
+# %% [markdown]
+# #### FPD10
+
+# %%
+# #### Train
+# sq = """
+#   with modelname as
+#   (SELECT
+#     mmrd.customerId,mmrd.digitalLoanAccountId,prediction Alpha_cic_sil_score,start_time,end_time,modelDisplayName,modelVersionId,
+#   case when trenchCategory is null then (case when mt.ln_user_type='1_Repeat Applicant' then 'Trench 3'
+#     when mt.ln_user_type <>'1_Repeat Applicant' and DATE_DIFF(current_date(), mt.onb_tsa_onboarding_datetime, DAY) >30 then 'Trench 2'
+#     else 'Trench1' end)
+#      when trenchCategory = '' then (case when mt.ln_user_type='1_Repeat Applicant' then 'Trench 3'
+#     when mt.ln_user_type <>'1_Repeat Applicant' and DATE_DIFF(current_date(), mt.onb_tsa_onboarding_datetime, DAY) >30 then 'Trench 2'
+#     else 'Trench 1' end)
+#     else trenchCategory end  as trenchCategory,
+#     REPLACE(REPLACE(calcFeature, "'", '"'), "None", "null") AS calcFeature,
+#     Data_selection,
+#     deviceOs osType,
+#   FROM prj-prod-dataplatform.dap_ds_poweruser_playground.ml_training_model_run_details_20260116 mmrd
+#   left join prj-prod-dataplatform.risk_credit_mis.model_loan_score_mart mt on mt.digitalLoanAccountId = mmrd.digitalLoanAccountId
+#   WHERE modelDisplayName in ('Alpha - CIC-SIL-Model', 'cic_model_sil', 'Sil-Alpha-CIC-SIL-Model')
+#   ),
+#   deliquency as
+# (select loanAccountNumber,
+# case when obs_min_inst_def0 >= 1 and min_inst_def0 = 1 then 1 else 0 end deffpd0,
+# case when obs_min_inst_def10 >=1 and min_inst_def10 =1 then 1 else 0 end deffpd10,
+# case when obs_min_inst_def30 >=1 and min_inst_def30 =1 then 1 else 0 end deffpd30,
+# case when obs_min_inst_def30 >=2 and min_inst_def30 in (1,2) then 1 else 0 end deffspd30,
+# case when obs_min_inst_def30 >=3 and min_inst_def30 in (1,2,3) then 1 else 0 end deffstpd30,
+# case when obs_min_inst_def0 >= 1 then 1 else 0 end flg_mature_fpd0,
+# case when obs_min_inst_def10 >=1 then 1 else 0 end flg_mature_fpd10,
+# case when obs_min_inst_def30 >=1 then 1 else 0 end flg_mature_fpd30,
+# case when obs_min_inst_def30 >=2 then 1 else 0 end flg_mature_fspd_30,
+# case when obs_min_inst_def30 >=3 then 1 else 0 end flg_mature_fstpd_30
+# from prj-prod-dataplatform.risk_credit_mis.loan_deliquency_data),
+# base as
+# (select distinct r.customerId,
+#   r.digitalLoanAccountId,
+#   loanmaster.loanAccountNumber,
+#   r.modelDisplayName,
+#   r.Alpha_cic_sil_score,
+#   coalesce(IF(loanmaster.new_loan_type = 'Flex-up', loanmaster.startApplyDateTime, loanmaster.termsAndConditionsSubmitDateTime),  cast(r.start_time as datetime)) AS appln_submit_datetime,
+#   date(loanmaster.disbursementDateTime) disbursementdate,
+#   format_date('%Y-%m', coalesce(IF(loanmaster.new_loan_type = 'Flex-up', loanmaster.startApplyDateTime, loanmaster.termsAndConditionsSubmitDateTime),  cast(r.start_time as datetime))) as Application_month,
+#   Data_selection,
+#     del.deffpd10,
+#   del.flg_mature_fpd10,
+#   loanmaster.new_loan_type,
+#   modelVersionId,
+#     trenchCategory,
+#     case when r.trenchCategory in ('Trench 1', 'Trench 2') then 'New_Applicant' else 'Repeat_Applicant' end Application_type,
+#     case when loanmaster.loantype='BNPL' and store_type =1 then 'Appliance'
+#     when loanmaster.loantype='BNPL' and store_type =2 then 'Mobile'
+#     when loanmaster.loantype='BNPL' and store_type =3 then 'Mall'
+#     when loanmaster.loantype='BNPL' and store_type not in (1,2,3) then store_tagging
+#     else 'not applicable' end as loan_product_type,
+#       coalesce((case when lower(r.osType) like '%andro%' then 'android'
+#                   when lower(r.osType) like '%os%' then 'ios' else lower(r.osType) end),
+#             (case when lower(coalesce(loanmaster.osversion_v2, loanmaster.osVersion)) like '%andro%' then 'android'
+#                   when lower(coalesce(loanmaster.osversion_v2, loanmaster.osVersion)) like '%os%' then 'ios'
+#                   when lower(loanmaster.deviceType) like '%andro%' then 'android'
+#                   else 'ios' end)
+#             ) as osType
+#     from modelname r
+#   left join risk_credit_mis.loan_master_table loanmaster  ON loanmaster.digitalLoanAccountId = r.digitalLoanAccountId
+#   inner join deliquency del on del.loanAccountNumber = loanmaster.loanAccountNumber
+#   left join(SELECT DISTINCT mer_refferal_code, mer_name mer_name,store_type,store_tagging FROM `dl_loans_db_raw.tdbk_merchant_refferal_mtb`
+#   left join worktable_datachampions.TARGET_SPLIT P on P.STORE_NAME = mer_name
+#  qualify row_number() over(partition by mer_refferal_code order by  created_dt desc)=1) sil_category on loanmaster.purpleKey=sil_category.mer_refferal_code
+#   where loanmaster.flagDisbursement = 1
+#   and loanmaster.disbursementDateTime is not null
+#   and r.Alpha_cic_sil_score is not null
+#   and del.flg_mature_fpd10 = 1
+#   )
+#   select * from base
+#   where data_selection not like '%Pre_Train%'
+#   qualify row_number() over(partition by digitalLoanAccountId, modelVersionId order by appln_submit_datetime) = 1
+#   ;
+#   """
+# dfd = client.query(sq).to_dataframe()
+# # dfd = dfd.drop_duplicates(keep='first')
+# print(f"The shape of the cic sil train fpd10 dataframe downloaded is:\t {dfd.shape}")
+# dfd.head()
+
+
+# %%
+# df_concat = dfd.copy()
+
+# %%
+# df_concat["Alpha_cic_sil_score"] = pd.to_numeric(df_concat["Alpha_cic_sil_score"], errors="coerce")
+
+# %%
+# start = time.perf_counter()
+
+# fact_table, dimension_table = calculate_periodic_gini_prod_ver_trench_dimfact(
+#     df_concat,
+#     "Alpha_cic_sil_score",
+#     "deffpd10",
+#     "FPD10",
+#     data_selection_column="Data_selection",  # Add this
+#     model_version_column="modelVersionId",
+#     trench_column="trenchCategory",
+#     loan_type_column="new_loan_type",
+#     loan_product_type_column="loan_product_type",
+#     ostype_column="osType",  # Add this
+#     apptype_column="Application_type", 
+#     account_id_column="digitalLoanAccountId",
+# )
+
+# end = time.perf_counter()
+# print(f"To calculate cic sil fpd 10 Elapsed time: {(end - start)/60:.3f} minutes")
+
+# %%
+# fact_table, dimension_table = update_tables(fact_table, dimension_table, model_name="cic_model_sil", product="SIL")
+
+# %%
+# df_f_fpd10_cicsil = fact_table.copy()
+# df_d_fpd10_cicsil = dimension_table.copy()
+
+# print(f"The shape of fact table and copied dataframe are:\t {fact_table.shape} - {df_f_fpd10_cicsil.shape}")
+# print(f"The shape of dimension table and copied dataframe are:\t {dimension_table.shape} - {df_d_fpd10_cicsil.shape}")
+
+# %%
+# # table_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.fact_table3"
+# job_config = bigquery.LoadJobConfig(
+#     write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
+# )
+# job = client.load_table_from_dataframe(df_f_fpd10_cicsil, facttable_id, job_config=job_config)
+# job.result()  # Wait for the job to complete
+
+# # %%
+# # Upload to BigQuery
+# # table_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.dimension_table3"
+# job_config = bigquery.LoadJobConfig(
+#     write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
+# )
+# job = client.load_table_from_dataframe(
+#     df_d_fpd10_cicsil, dimtable_id, job_config=job_config
+# )
+# job.result()  # Wait for the job to complete
+
+# %% [markdown]
+# #### FPD30
+
+# %%
+# sq = """
+#   with modelname as
+#   (SELECT
+#     mmrd.customerId,mmrd.digitalLoanAccountId,prediction Alpha_cic_sil_score,start_time,end_time,modelDisplayName,modelVersionId,
+#      case when trenchCategory is null then (case when mt.ln_user_type='1_Repeat Applicant' then 'Trench 3'
+#     when mt.ln_user_type <>'1_Repeat Applicant' and DATE_DIFF(current_date(), mt.onb_tsa_onboarding_datetime, DAY) >30 then 'Trench 2'
+#     else 'Trench1' end)
+#      when trenchCategory = '' then (case when mt.ln_user_type='1_Repeat Applicant' then 'Trench 3'
+#     when mt.ln_user_type <>'1_Repeat Applicant' and DATE_DIFF(current_date(), mt.onb_tsa_onboarding_datetime, DAY) >30 then 'Trench 2'
+#     else 'Trench 1' end)
+#     else trenchCategory end  as trenchCategory,
+#     REPLACE(REPLACE(calcFeature, "'", '"'), "None", "null") AS calcFeature,
+#     Data_selection,
+#     deviceOs osType,
+#   FROM prj-prod-dataplatform.dap_ds_poweruser_playground.ml_training_model_run_details_20260116 mmrd
+#   left join prj-prod-dataplatform.risk_credit_mis.model_loan_score_mart mt on mt.digitalLoanAccountId = mmrd.digitalLoanAccountId
+#   WHERE modelDisplayName in ('Alpha - CIC-SIL-Model', 'cic_model_sil', 'Sil-Alpha-CIC-SIL-Model')
+#   ),
+#   deliquency as
+# (select loanAccountNumber,
+# case when obs_min_inst_def0 >= 1 and min_inst_def0 = 1 then 1 else 0 end deffpd0,
+# case when obs_min_inst_def10 >=1 and min_inst_def10 =1 then 1 else 0 end deffpd10,
+# case when obs_min_inst_def30 >=1 and min_inst_def30 =1 then 1 else 0 end deffpd30,
+# case when obs_min_inst_def30 >=2 and min_inst_def30 in (1,2) then 1 else 0 end deffspd30,
+# case when obs_min_inst_def30 >=3 and min_inst_def30 in (1,2,3) then 1 else 0 end deffstpd30,
+# case when obs_min_inst_def0 >= 1 then 1 else 0 end flg_mature_fpd0,
+# case when obs_min_inst_def10 >=1 then 1 else 0 end flg_mature_fpd10,
+# case when obs_min_inst_def30 >=1 then 1 else 0 end flg_mature_fpd30,
+# case when obs_min_inst_def30 >=2 then 1 else 0 end flg_mature_fspd_30,
+# case when obs_min_inst_def30 >=3 then 1 else 0 end flg_mature_fstpd_30
+# from prj-prod-dataplatform.risk_credit_mis.loan_deliquency_data),
+# base as
+# (select distinct r.customerId,
+#   r.digitalLoanAccountId,
+#   loanmaster.loanAccountNumber,
+#   r.modelDisplayName,
+#   r.Alpha_cic_sil_score,
+#   coalesce(IF(loanmaster.new_loan_type = 'Flex-up', loanmaster.startApplyDateTime, loanmaster.termsAndConditionsSubmitDateTime),  cast(r.start_time as datetime)) AS appln_submit_datetime,
+#   date(loanmaster.disbursementDateTime) disbursementdate,
+#   format_date('%Y-%m', coalesce(IF(loanmaster.new_loan_type = 'Flex-up', loanmaster.startApplyDateTime, loanmaster.termsAndConditionsSubmitDateTime),  cast(r.start_time as datetime))) as Application_month,
+#   Data_selection,
+#     del.deffpd30,
+#   del.flg_mature_fpd30,
+#   loanmaster.new_loan_type,
+#   modelVersionId,
+#     trenchCategory,
+#     case when r.trenchCategory in ('Trench 1', 'Trench 2') then 'New_Applicant' else 'Repeat_Applicant' end Application_type,
+#     case when loanmaster.loantype='BNPL' and store_type =1 then 'Appliance'
+#     when loanmaster.loantype='BNPL' and store_type =2 then 'Mobile'
+#     when loanmaster.loantype='BNPL' and store_type =3 then 'Mall'
+#     when loanmaster.loantype='BNPL' and store_type not in (1,2,3) then store_tagging
+#     else 'not applicable' end as loan_product_type,
+#        coalesce((case when lower(r.osType) like '%andro%' then 'android'
+#                   when lower(r.osType) like '%os%' then 'ios' else lower(r.osType) end),
+#             (case when lower(coalesce(loanmaster.osversion_v2, loanmaster.osVersion)) like '%andro%' then 'android'
+#                   when lower(coalesce(loanmaster.osversion_v2, loanmaster.osVersion)) like '%os%' then 'ios'
+#                   when lower(loanmaster.deviceType) like '%andro%' then 'android'
+#                   else 'ios' end)
+#             ) as osType
+#     from modelname r
+#   left join risk_credit_mis.loan_master_table loanmaster  ON loanmaster.digitalLoanAccountId = r.digitalLoanAccountId
+#   inner join deliquency del on del.loanAccountNumber = loanmaster.loanAccountNumber
+#   left join(SELECT DISTINCT mer_refferal_code, mer_name mer_name,store_type,store_tagging FROM `dl_loans_db_raw.tdbk_merchant_refferal_mtb`
+#   left join worktable_datachampions.TARGET_SPLIT P on P.STORE_NAME = mer_name
+#  qualify row_number() over(partition by mer_refferal_code order by  created_dt desc)=1) sil_category on loanmaster.purpleKey=sil_category.mer_refferal_code
+#   where loanmaster.flagDisbursement = 1
+#   and loanmaster.disbursementDateTime is not null
+#   and r.Alpha_cic_sil_score is not null
+#   and del.flg_mature_fpd30 = 1
+#   )
+#   select * from base
+#   where data_selection not like '%Pre_Train%'
+#   qualify row_number() over(partition by digitalLoanAccountId, modelVersionId order by appln_submit_datetime) = 1
+#   ;
+#   """
+# dfd = client.query(sq).to_dataframe()
+# # dfd = dfd.drop_duplicates(keep='first')
+# print(f"The shape of the cic train fpd30 dataframe downloaded is:\t {dfd.shape}")
+# dfd.head()
+
+
+# %%
+# df_concat = dfd.copy()
+# df_concat["Alpha_cic_sil_score"] = pd.to_numeric(df_concat["Alpha_cic_sil_score"], errors="coerce")
+# df_concat['deffpd30'] = pd.to_numeric(df_concat['deffpd30'], errors='coerce')
+# df_concat['flg_mature_fpd30'] = pd.to_numeric(df_concat['flg_mature_fpd30'], errors='coerce')
+
+# %%
+# start = time.perf_counter()
+# fact_table, dimension_table = calculate_periodic_gini_prod_ver_trench_dimfact(
+#     df_concat,
+#     "Alpha_cic_sil_score",
+#     "deffpd30",
+#     "FPD30",
+#     data_selection_column="Data_selection",  # Add this
+#     model_version_column="modelVersionId",
+#     trench_column="trenchCategory",
+#     loan_type_column="new_loan_type",
+#     loan_product_type_column="loan_product_type",
+#     ostype_column="osType",  # Add this
+#     apptype_column="Application_type",
+#     account_id_column="digitalLoanAccountId",
+# )
+
+# end = time.perf_counter()
+# print(f"To calculate cic sil fpd 0 Elapsed time: {(end - start)/60:.3f} minutes")
+
+# %%
+# fact_table, dimension_table = update_tables(fact_table, dimension_table, model_name="cic_model_sil", product="SIL")
+
+# %%
+# df_f_fpd30_cicsil = fact_table.copy()
+# df_d_fpd30_cicsil = dimension_table.copy()
+
+# print(f"The shape of fact table and copied dataframe are:\t {fact_table.shape} - {df_f_fpd30_cicsil.shape}")
+# print(f"The shape of dimension table and copied dataframe are:\t {dimension_table.shape} - {df_d_fpd30_cicsil.shape}")
+
+# %%
+# # table_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.fact_table3"
+# job_config = bigquery.LoadJobConfig(
+#     write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
+# )
+# job = client.load_table_from_dataframe(df_f_fpd30_cicsil, facttable_id, job_config=job_config)
+# job.result()  # Wait for the job to complete
+
+# # %%
+# # Upload to BigQuery
+# # table_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.dimension_table3"
+# job_config = bigquery.LoadJobConfig(
+#     write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
+# )
+# job = client.load_table_from_dataframe(
+#     df_d_fpd30_cicsil, dimtable_id, job_config=job_config
+# )
+# job.result()  # Wait for the job to complete
+
+# %% [markdown]
+# #### FSPD30
+
+# %%
+# sq = """
+#   with modelname as
+#   (SELECT
+#     mmrd.customerId,mmrd.digitalLoanAccountId,prediction Alpha_cic_sil_score,start_time,end_time,modelDisplayName,modelVersionId,
+#    case when trenchCategory is null then (case when mt.ln_user_type='1_Repeat Applicant' then 'Trench 3'
+#     when mt.ln_user_type <>'1_Repeat Applicant' and DATE_DIFF(current_date(), mt.onb_tsa_onboarding_datetime, DAY) >30 then 'Trench 2'
+#     else 'Trench1' end)
+#      when trenchCategory = '' then (case when mt.ln_user_type='1_Repeat Applicant' then 'Trench 3'
+#     when mt.ln_user_type <>'1_Repeat Applicant' and DATE_DIFF(current_date(), mt.onb_tsa_onboarding_datetime, DAY) >30 then 'Trench 2'
+#     else 'Trench 1' end)
+#     else trenchCategory end  as trenchCategory,
+#     REPLACE(REPLACE(calcFeature, "'", '"'), "None", "null") AS calcFeature,
+#     Data_selection,
+#     deviceOs osType,
+#   FROM prj-prod-dataplatform.dap_ds_poweruser_playground.ml_training_model_run_details_20260116 mmrd
+#   left join prj-prod-dataplatform.risk_credit_mis.model_loan_score_mart mt on mt.digitalLoanAccountId = mmrd.digitalLoanAccountId
+#   WHERE modelDisplayName in ('Alpha - CIC-SIL-Model', 'cic_model_sil', 'Sil-Alpha-CIC-SIL-Model')
+#   ),
+#   deliquency as
+# (select loanAccountNumber,
+# case when obs_min_inst_def0 >= 1 and min_inst_def0 = 1 then 1 else 0 end deffpd0,
+# case when obs_min_inst_def10 >=1 and min_inst_def10 =1 then 1 else 0 end deffpd10,
+# case when obs_min_inst_def30 >=1 and min_inst_def30 =1 then 1 else 0 end deffpd30,
+# case when obs_min_inst_def30 >=2 and min_inst_def30 in (1,2) then 1 else 0 end deffspd30,
+# case when obs_min_inst_def30 >=3 and min_inst_def30 in (1,2,3) then 1 else 0 end deffstpd30,
+# case when obs_min_inst_def0 >= 1 then 1 else 0 end flg_mature_fpd0,
+# case when obs_min_inst_def10 >=1 then 1 else 0 end flg_mature_fpd10,
+# case when obs_min_inst_def30 >=1 then 1 else 0 end flg_mature_fpd30,
+# case when obs_min_inst_def30 >=2 then 1 else 0 end flg_mature_fspd_30,
+# case when obs_min_inst_def30 >=3 then 1 else 0 end flg_mature_fstpd_30
+# from prj-prod-dataplatform.risk_credit_mis.loan_deliquency_data),
+# base as
+# (select distinct r.customerId,
+#   r.digitalLoanAccountId,
+#   loanmaster.loanAccountNumber,
+#   r.modelDisplayName,
+#   r.Alpha_cic_sil_score,
+#   coalesce(IF(loanmaster.new_loan_type = 'Flex-up', loanmaster.startApplyDateTime, loanmaster.termsAndConditionsSubmitDateTime),  cast(r.start_time as datetime)) AS appln_submit_datetime,
+#   date(loanmaster.disbursementDateTime) disbursementdate,
+#   format_date('%Y-%m', coalesce(IF(loanmaster.new_loan_type = 'Flex-up', loanmaster.startApplyDateTime, loanmaster.termsAndConditionsSubmitDateTime),  cast(r.start_time as datetime))) as Application_month,
+#   Data_selection,
+#     del.deffspd30,
+#   del.flg_mature_fspd_30,
+#   loanmaster.new_loan_type,
+#   modelVersionId,
+#     trenchCategory,
+#     case when r.trenchCategory in ('Trench 1', 'Trench 2') then 'New_Applicant' else 'Repeat_Applicant' end Application_type,
+#     case when loanmaster.loantype='BNPL' and store_type =1 then 'Appliance'
+#     when loanmaster.loantype='BNPL' and store_type =2 then 'Mobile'
+#     when loanmaster.loantype='BNPL' and store_type =3 then 'Mall'
+#     when loanmaster.loantype='BNPL' and store_type not in (1,2,3) then store_tagging
+#     else 'not applicable' end as loan_product_type,
+#      coalesce((case when lower(r.osType) like '%andro%' then 'android'
+#                   when lower(r.osType) like '%os%' then 'ios' else lower(r.osType) end),
+#             (case when lower(coalesce(loanmaster.osversion_v2, loanmaster.osVersion)) like '%andro%' then 'android'
+#                   when lower(coalesce(loanmaster.osversion_v2, loanmaster.osVersion)) like '%os%' then 'ios'
+#                   when lower(loanmaster.deviceType) like '%andro%' then 'android'
+#                   else 'ios' end)
+#             ) as osType
+#     from modelname r
+#   left join risk_credit_mis.loan_master_table loanmaster  ON loanmaster.digitalLoanAccountId = r.digitalLoanAccountId
+#   inner join deliquency del on del.loanAccountNumber = loanmaster.loanAccountNumber
+#   left join(SELECT DISTINCT mer_refferal_code, mer_name mer_name,store_type,store_tagging FROM `dl_loans_db_raw.tdbk_merchant_refferal_mtb`
+#   left join worktable_datachampions.TARGET_SPLIT P on P.STORE_NAME = mer_name
+#  qualify row_number() over(partition by mer_refferal_code order by  created_dt desc)=1) sil_category on loanmaster.purpleKey=sil_category.mer_refferal_code
+#   where loanmaster.flagDisbursement = 1
+#   and loanmaster.disbursementDateTime is not null
+#   and r.Alpha_cic_sil_score is not null
+#   and del.flg_mature_fspd_30 = 1
+#   )
+#   select * from base
+#   where data_selection not like '%Pre_Train%'
+#   qualify row_number() over(partition by digitalLoanAccountId, modelVersionId order by appln_submit_datetime) = 1
+#   ;
+#   """
+# dfd = client.query(sq).to_dataframe()
+# # dfd = dfd.drop_duplicates(keep='first')
+# print(f"The shape of the cic sil fspd30 train dataframe downloaded is:\t {dfd.shape}")
+# dfd.head()
+
+# %%
+# df_concat = dfd.copy()
+# df_concat["Alpha_cic_sil_score"] = pd.to_numeric(df_concat["Alpha_cic_sil_score"], errors="coerce")
+# df_concat['deffspd30'] = pd.to_numeric(df_concat['deffspd30'], errors='coerce')
+# df_concat['flg_mature_fspd_30'] = pd.to_numeric(df_concat['flg_mature_fspd_30'], errors='coerce')
+
+# %%
+# start = time.perf_counter()
+
+# fact_table, dimension_table = calculate_periodic_gini_prod_ver_trench_dimfact(
+#     df_concat,
+#     "Alpha_cic_sil_score",
+#     "deffspd30",
+#     "FSPD30",
+#     data_selection_column="Data_selection",  # Add this
+#     model_version_column="modelVersionId",
+#     trench_column="trenchCategory",
+#     loan_type_column="new_loan_type",
+#     loan_product_type_column="loan_product_type",
+#     ostype_column="osType",
+#     apptype_column="Application_type",  # Add this
+#     account_id_column="digitalLoanAccountId",
+# )
+
+# end = time.perf_counter()
+# print(f"To calculate cic sil fpd 0 Elapsed time: {(end - start)/60:.3f} minutes")
+
+
+# %%
+# fact_table, dimension_table = update_tables(fact_table, dimension_table, model_name="cic_model_sil", product="SIL")
+
+# %%
+# df_f_fspd30_cicsil = fact_table.copy()
+# df_d_fspd30_cicsil = dimension_table.copy()
+
+# print(f"The shape of fact table and copied dataframe are:\t {fact_table.shape} - {df_f_fspd30_cicsil.shape}")
+# print(f"The shape of dimension table and copied dataframe are:\t {dimension_table.shape} - {df_d_fspd30_cicsil.shape}")
+
+# %%
+# # table_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.fact_table3"
+# job_config = bigquery.LoadJobConfig(
+#     write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
+# )
+# job = client.load_table_from_dataframe(df_f_fspd30_cicsil, facttable_id, job_config=job_config)
+# job.result()  # Wait for the job to complete
+
+# # %%
+# # Upload to BigQuery
+# # table_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.dimension_table3"
+# job_config = bigquery.LoadJobConfig(
+#     write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
+# )
+# job = client.load_table_from_dataframe(
+#     df_d_fspd30_cicsil, dimtable_id, job_config=job_config
+# )
+# job.result()  # Wait for the job to complete
+
+# %% [markdown]
+# #### FSTPD30
+
+# %%
+# sq = """
+#   with modelname as
+#   (  SELECT
+#     mmrd.customerId,mmrd.digitalLoanAccountId,prediction Alpha_cic_sil_score,start_time,end_time,modelDisplayName,modelVersionId,
+#    case when trenchCategory is null then (case when mt.ln_user_type='1_Repeat Applicant' then 'Trench 3'
+#     when mt.ln_user_type <>'1_Repeat Applicant' and DATE_DIFF(current_date(), mt.onb_tsa_onboarding_datetime, DAY) >30 then 'Trench 2'
+#     else 'Trench1' end)
+#      when trenchCategory = '' then (case when mt.ln_user_type='1_Repeat Applicant' then 'Trench 3'
+#     when mt.ln_user_type <>'1_Repeat Applicant' and DATE_DIFF(current_date(), mt.onb_tsa_onboarding_datetime, DAY) >30 then 'Trench 2'
+#     else 'Trench 1' end)
+#     else trenchCategory end  as trenchCategory,
+#     REPLACE(REPLACE(calcFeature, "'", '"'), "None", "null") AS calcFeature,
+#     Data_selection,
+#     deviceOs osType,
+#   FROM prj-prod-dataplatform.dap_ds_poweruser_playground.ml_training_model_run_details_20260116 mmrd
+#   left join prj-prod-dataplatform.risk_credit_mis.model_loan_score_mart mt on mt.digitalLoanAccountId = mmrd.digitalLoanAccountId
+#   WHERE modelDisplayName in ('Alpha - CIC-SIL-Model', 'cic_model_sil', 'Sil-Alpha-CIC-SIL-Model')
+#   ),
+#   deliquency as
+# (select loanAccountNumber,
+# case when obs_min_inst_def0 >= 1 and min_inst_def0 = 1 then 1 else 0 end deffpd0,
+# case when obs_min_inst_def10 >=1 and min_inst_def10 =1 then 1 else 0 end deffpd10,
+# case when obs_min_inst_def30 >=1 and min_inst_def30 =1 then 1 else 0 end deffpd30,
+# case when obs_min_inst_def30 >=2 and min_inst_def30 in (1,2) then 1 else 0 end deffspd30,
+# case when obs_min_inst_def30 >=3 and min_inst_def30 in (1,2,3) then 1 else 0 end deffstpd30,
+# case when obs_min_inst_def0 >= 1 then 1 else 0 end flg_mature_fpd0,
+# case when obs_min_inst_def10 >=1 then 1 else 0 end flg_mature_fpd10,
+# case when obs_min_inst_def30 >=1 then 1 else 0 end flg_mature_fpd30,
+# case when obs_min_inst_def30 >=2 then 1 else 0 end flg_mature_fspd_30,
+# case when obs_min_inst_def30 >=3 then 1 else 0 end flg_mature_fstpd_30
+# from prj-prod-dataplatform.risk_credit_mis.loan_deliquency_data),
+# base as
+# (select distinct r.customerId,
+#   r.digitalLoanAccountId,
+#   loanmaster.loanAccountNumber,
+#   r.modelDisplayName,
+#   r.Alpha_cic_sil_score,
+#   coalesce(IF(loanmaster.new_loan_type = 'Flex-up', loanmaster.startApplyDateTime, loanmaster.termsAndConditionsSubmitDateTime),  cast(r.start_time as datetime)) AS appln_submit_datetime,
+#   date(loanmaster.disbursementDateTime) disbursementdate,
+#   format_date('%Y-%m', coalesce(IF(loanmaster.new_loan_type = 'Flex-up', loanmaster.startApplyDateTime, loanmaster.termsAndConditionsSubmitDateTime),  cast(r.start_time as datetime))) as Application_month,
+#    Data_selection,
+#     del.deffstpd30,
+#   del.flg_mature_fstpd_30,
+#   loanmaster.new_loan_type,
+#   modelVersionId,
+#     trenchCategory,
+#     case when r.trenchCategory in ('Trench 1', 'Trench 2') then 'New_Applicant' else 'Repeat_Applicant' end Application_type,
+#     case when loanmaster.loantype='BNPL' and store_type =1 then 'Appliance'
+#     when loanmaster.loantype='BNPL' and store_type =2 then 'Mobile'
+#     when loanmaster.loantype='BNPL' and store_type =3 then 'Mall'
+#     when loanmaster.loantype='BNPL' and store_type not in (1,2,3) then store_tagging
+#     else 'not applicable' end as loan_product_type,
+#        coalesce((case when lower(r.osType) like '%andro%' then 'android'
+#                   when lower(r.osType) like '%os%' then 'ios' else lower(r.osType) end),
+#             (case when lower(coalesce(loanmaster.osversion_v2, loanmaster.osVersion)) like '%andro%' then 'android'
+#                   when lower(coalesce(loanmaster.osversion_v2, loanmaster.osVersion)) like '%os%' then 'ios'
+#                   when lower(loanmaster.deviceType) like '%andro%' then 'android'
+#                   else 'ios' end)
+#             ) as osType
+#     from modelname r
+#   left join risk_credit_mis.loan_master_table loanmaster  ON loanmaster.digitalLoanAccountId = r.digitalLoanAccountId
+#   inner join deliquency del on del.loanAccountNumber = loanmaster.loanAccountNumber
+#   left join(SELECT DISTINCT mer_refferal_code, mer_name mer_name,store_type,store_tagging FROM `dl_loans_db_raw.tdbk_merchant_refferal_mtb`
+#   left join worktable_datachampions.TARGET_SPLIT P on P.STORE_NAME = mer_name
+#  qualify row_number() over(partition by mer_refferal_code order by  created_dt desc)=1) sil_category on loanmaster.purpleKey=sil_category.mer_refferal_code
+#   where loanmaster.flagDisbursement = 1
+#   and loanmaster.disbursementDateTime is not null
+#   and r.Alpha_cic_sil_score is not null
+#   and del.flg_mature_fstpd_30 = 1
+#   )
+#   select * from base
+#   where data_selection not like '%Pre_Train%'
+#   qualify row_number() over(partition by digitalLoanAccountId, modelVersionId order by appln_submit_datetime) = 1
+#   ;
+#   """
+# dfd = client.query(sq).to_dataframe()
+# # dfd = dfd.drop_duplicates(keep='first')
+# print(f"The shape of the cic sil fstpd30 train dataframe downloaded is:\t {dfd.shape}")
+# dfd.head()
+
+
+# %%
+# df_concat = dfd.copy()
+# df_concat["Alpha_cic_sil_score"] = pd.to_numeric( df_concat["Alpha_cic_sil_score"], errors="coerce")
+# df_concat['deffstpd30'] = pd.to_numeric(df_concat['deffstpd30'], errors='coerce')
+# df_concat['flg_mature_fstpd_30'] = pd.to_numeric(df_concat['flg_mature_fstpd_30'], errors='coerce')
+
+# %%
+
+# start = time.perf_counter()
+# fact_table, dimension_table = calculate_periodic_gini_prod_ver_trench_dimfact(
+#     df_concat,
+#     "Alpha_cic_sil_score",
+#     "deffstpd30",
+#     "FSTPD30",
+#     data_selection_column="Data_selection",  # Add this
+#     model_version_column="modelVersionId",
+#     trench_column="trenchCategory",
+#     loan_type_column="new_loan_type",
+#     loan_product_type_column="loan_product_type",
+#     ostype_column="osType",
+#     apptype_column="Application_type",
+#     account_id_column="digitalLoanAccountId",
+# )
+# end = time.perf_counter()
+# print(f"To calculate cic sil fpd 0 Elapsed time: {(end - start)/60:.3f} minutes")
+
+
+# %%
+# fact_table, dimension_table = update_tables(fact_table, dimension_table, model_name="cic_model_sil", product="SIL")
+
+# %%
+# df_f_fstpd30_cicsil = fact_table.copy()
+# df_d_fstpd30_cicsil = dimension_table.copy()
+
+# print(f"The shape of fact table and copied dataframe are:\t {fact_table.shape} - {df_f_fstpd30_cicsil.shape}")
+# print(f"The shape of dimension table and copied dataframe are:\t {dimension_table.shape} - {df_d_fstpd30_cicsil.shape}")
+
+# %%
+# # table_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.fact_table3"
+# job_config = bigquery.LoadJobConfig(
+#     write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
+# )
+# job = client.load_table_from_dataframe(df_f_fstpd30_cicsil, facttable_id, job_config=job_config)
+# job.result()  # Wait for the job to complete
+
+# # %%
+# # Upload to BigQuery
+# # table_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.dimension_table3"
+# job_config = bigquery.LoadJobConfig(
+#     write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
+# )
+# job = client.load_table_from_dataframe(
+#     df_d_fstpd30_cicsil, dimtable_id, job_config=job_config
+# )
+# job.result()  # Wait for the job to complete
+
+# %%
+# df_fact_cic_sil = pd.concat([df_f_fpd0_cicsil, df_f_fpd10_cicsil, df_f_fpd30_cicsil, df_f_fspd30_cicsil, df_f_fstpd30_cicsil], ignore_index = True)
+# df_dim_cic_sil = pd.concat([df_d_fpd0_cicsil, df_d_fpd10_cicsil, df_d_fpd30_cicsil, df_d_fspd30_cicsil, df_d_fstpd30_cicsil], ignore_index = True)
 
 # %%
 # import pandas as pd
