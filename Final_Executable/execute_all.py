@@ -15,6 +15,7 @@ PY_FILES = [
     r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_cash_stack_model.py",
     r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_events_model_cash.py",
     r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_cic_model_cash.py",
+    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_cash_stack_model_transaction_score.py",
     r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_alpha_stack_model_sil.py",
     r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_Beta App Score SIL.py",
     r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_beta_stack_model_sil_credo_score.py",
