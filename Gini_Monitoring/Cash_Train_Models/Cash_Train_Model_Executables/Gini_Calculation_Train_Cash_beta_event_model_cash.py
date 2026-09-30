@@ -7,6 +7,20 @@
 # %% [markdown]
 # ## 💻 Define Libraries
 
+import io
+import os
+import pickle
+import tempfile
+import time
+import uuid
+from datetime import datetime, timedelta
+from typing import Union
+
+import duckdb as dd
+import gcsfs
+import joblib
+import matplotlib.pyplot as plt
+import numpy as np
 # %%
 # %% [markdown]
 # # Jupyter Notebook Loading Header
@@ -16,32 +30,17 @@
 # %% [markdown]
 ## Import Libraries
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 import seaborn as sns
-from google.cloud import bigquery
-from google.cloud import storage
-import os
-import tempfile
-import time
-from datetime import datetime
-import uuid
-import joblib
-import uuid
+from google.cloud import bigquery, storage
 from sklearn.metrics import roc_auc_score
-from datetime import datetime, timedelta
-import gcsfs
-import duckdb as dd
-import pickle
-import joblib
-from typing import Union
-import io
+
 path = r'C:\Users\Dwaipayan\AppData\Roaming\gcloud\application_default_credentials.json'
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = path
 client = bigquery.Client(project='prj-prod-dataplatform')
 os.environ["GOOGLE_CLOUD_PROJECT"] = "prj-prod-dataplatform"
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 # %% [markdown]
@@ -88,10 +87,11 @@ def calculate_gini(scores, labels):
 # %% [markdown]
 # ### Gini Optimized
 
+from itertools import combinations
+
+import numpy as np
 # %%
 import pandas as pd
-import numpy as np
-from itertools import combinations
 from scipy.stats import rankdata
 
 
@@ -309,11 +309,12 @@ def calculate_periodic_gini_prod_ver_trench_dimfact(
 # %% [markdown]
 # ### Calculate Periodic Gini Duckdb
 
+from itertools import combinations
+
+import duckdb
+import numpy as np
 # %%
 import pandas as pd
-import numpy as np
-from itertools import combinations
-import duckdb
 
 
 def calculate_periodic_gini_duckdb(
@@ -484,13 +485,14 @@ def calculate_periodic_gini_duckdb(
 # %% [markdown]
 # ### Calculate Gini Multiprocessing
 
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor
+from itertools import combinations
+
+import numpy as np
 # %%
 import pandas as pd
-import numpy as np
-from itertools import combinations
 from scipy.stats import rankdata
-from concurrent.futures import ProcessPoolExecutor
-import multiprocessing as mp
 
 # ---- shared, read-only, per-worker state -----------------------------------
 # Populated in the PARENT process before the pool is created. On Linux
@@ -906,7 +908,6 @@ dfd.head()
 
 # %%
 df_concat = dfd.copy()
-del(dfd)
 
 # %%
 df_concat["prediction"] = pd.to_numeric(
@@ -954,8 +955,7 @@ job.result()  # Wait for the job to complete
 job_config = bigquery.LoadJobConfig(
     write_disposition="WRITE_TRUNCATE",  # or "WRITE_APPEND"
 )
-job = client.load_table_from_dataframe(
-    df_d_fpd0_betaeventcash, dimtable_id, job_config=job_config
+job = client.load_table_from_dataframe(df_d_fpd0_betaeventcash, dimtable_id, job_config=job_config
 )
 job.result()  # Wait for the job to complete
 
@@ -1012,7 +1012,7 @@ job_config = bigquery.LoadJobConfig(
     write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
 )
 job = client.load_table_from_dataframe(
-    df_d_fpd30_betaeventcash, dimtable_id, job_config=job_config
+    df_d_fpd10_betaeventcash, dimtable_id, job_config=job_config
 )
 job.result()  # Wait for the job to complete
 
