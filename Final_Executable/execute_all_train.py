@@ -20,7 +20,7 @@ PY_FILES = [
     r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Train_Models\Sil_Train_Models_Executables\Gini_calculation_train_sil_beta_app_score_sil.py",
     r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Train_Models\Sil_Train_Models_Executables\Gini_calculation_train_sil_beta_sil_demo_score.py",
     r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Train_Models\Sil_Train_Models_Executables\Gini_calculation_train_sil_beta_sil_stack_score_model.py",
-    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Train_Models\Sil_Train_Models_Executables\Gini_calculation_train_sil_beta_stack_model_sil_credo_score.py",
+    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Train_Models\Sil_Train_Models_Executables\Gini_calculation_train_sil_beta_stack_model_sil_credo_score.py",
     r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Train_Models\Sil_Train_Models_Executables\Gini_calculation_train_sil_cic_model_sil.py",
 ]
 
