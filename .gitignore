@@ -195,3 +195,4 @@ reports/generated/
 *.db
 *.sqlite
 *.sqlite3
+*.duckdb
