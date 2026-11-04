@@ -19,7 +19,9 @@ from __future__ import annotations
 import logging
 import re
 import shutil
+import sys
 import tempfile
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from pathlib import Path
@@ -175,8 +177,18 @@ def download_parquet_from_gcs(
     prefix: str,
     local_dir: Path,
     project: str = PROJECT_ID,
-    workers: int = 8,
+    workers: int = 4,
+    chunk_mb: int = 8,
+    attempts: int = 5,
+    timeout: int = 300,
 ) -> list[Path]:
+    """Download every parquet shard under gs://bucket/prefix into local_dir.
+
+    Built for flaky connections: each file is fetched in `chunk_mb` ranged
+    requests (a dropped connection only re-sends one chunk), written to a
+    .part file and renamed only once its size matches GCS, and the whole file is
+    retried up to `attempts` times. Files already complete in local_dir are skipped.
+    """
     from google.cloud import storage
 
     prefix = prefix.strip("/") + "/"
@@ -189,8 +201,26 @@ def download_parquet_from_gcs(
 
     def _dl(blob) -> Path:
         dest = local_dir / Path(blob.name).name
-        blob.download_to_filename(str(dest))
-        return dest
+        if dest.exists() and dest.stat().st_size == blob.size:
+            return dest  # finished by an earlier attempt / run
+        part = dest.with_name(dest.name + ".part")
+        blob.chunk_size = chunk_mb * 1024 * 1024  # multiple of 256 KiB
+        for attempt in range(1, attempts + 1):
+            try:
+                blob.download_to_filename(str(part), timeout=timeout)
+                got = part.stat().st_size
+                if got != blob.size:
+                    raise IOError(f"size mismatch: got {got}, expected {blob.size}")
+                part.replace(dest)
+                return dest
+            except Exception as exc:
+                part.unlink(missing_ok=True)
+                if attempt == attempts:
+                    raise
+                wait = 2 ** attempt
+                log.warning("%s: download attempt %d/%d failed (%s); retrying in %ds",
+                            dest.name, attempt, attempts, exc, wait)
+                time.sleep(wait)
 
     with ThreadPoolExecutor(max_workers=workers) as ex:
         files = list(ex.map(_dl, blobs))
@@ -444,5 +474,6 @@ def run_pipeline(
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    out = run_pipeline()
+    # `python Ml_Vector_Pipeline.py --skip-export` re-uses parquet already in GCS (no BigQuery cost)
+    out = run_pipeline(skip_export="--skip-export" in sys.argv)
     print(f"Done -> {out} (table: {TABLE_NAME})")
