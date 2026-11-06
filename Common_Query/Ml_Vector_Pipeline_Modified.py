@@ -260,11 +260,14 @@ def download_parquet_from_gcs(
 UNWRAP_KEYS = ("stackScoreModel", "demoScoreModel", "appScoreModel")
 UNWRAP_SINGLE_ELEMENT_ARRAY = True
 PREDICTION_DICT_KEY = "combined_score"
-# A feature whose value is missing (JSON null, or text in MISSING_TEXT) is stored as FILL_NUMERIC
-# with Data_type Float64 when the feature is numeric, and as NULL when it is categorical/date.
-# The feature's type is the majority Data_type of its non-missing values for that model/version.
+# A feature whose value is missing (JSON null, or text in MISSING_TEXT) is stored with
+# Values = NULL. Its Data_type is the feature's own type (majority Data_type of its non-missing
+# values for that model/version), so a numeric feature stays Float64 and never splits into
+# Float64 + String. No value is imputed: 0 would distort PSI.
 MISSING_TEXT = ("", "null", "none", "nan")
-FILL_NUMERIC = "0"
+# Keys of calcFeature that identify a record rather than describe it; never loaded as Features.
+# Matched case-insensitively on the last path segment (so `meta.customerId` is excluded too).
+EXCLUDE_FEATURES = ("customerId", "digitalLoanAccountId", "crifApplicationId", "loan_id")
 
 # Numeric text: 12, -3.5, .5, 1e-5  (leading-zero strings like '007' stay String: ids/zip codes)
 _NUM_RE = r'^\s*[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?\s*$'
@@ -490,7 +493,7 @@ QUALIFY row_number() OVER (PARTITION BY modelDisplayName, modelVersionId, Data_s
 """
 
 # One row per leaf of calcFeature (objects and arrays flattened to any depth). Text that only
-# stands for "missing" ('', null, none, nan) becomes a real NULL so that it is filled below.
+# stands for "missing" ('', null, none, nan) becomes a real NULL, typed by its feature below.
 _LEAF_SQL = r"""
 CREATE OR REPLACE TEMP TABLE leaf AS
 SELECT customerId, digitalLoanAccountId, modelDisplayName, modelVersionId, trenchCategory,
@@ -524,6 +527,7 @@ FROM (
     WHERE jt.type NOT IN ('OBJECT', 'ARRAY')   -- leaves only (incl. JSON null)
       AND jt.fullkey <> '$'
   )
+  WHERE __EXCLUDE_COND__                       -- identifier keys (customerId, ...) are not features
 )
 """
 
@@ -567,13 +571,13 @@ FROM leaf WHERE "Values" IS NOT NULL
 GROUP BY ALL
 """
 
-# missing value -> 0 for numeric features, NULL for categorical / date features
-_FILL_MISSING_SQL = r"""
+# missing value stays NULL; Data_type becomes the feature's type (Float64 / Date / String)
+_TYPE_MISSING_SQL = r"""
 INSERT INTO "__TABLE__"
 SELECT n.customerId, n.digitalLoanAccountId, n.modelDisplayName, n.modelVersionId,
        n.trenchCategory, n.deviceOs, n.new_loan_type, n.application_date, n.Data_selection,
        n.Features,
-       CASE WHEN f.ftype = '__DTYPE_FLOAT__' THEN '__FILL_NUMERIC__' END AS "Values",
+       NULL AS "Values",
        COALESCE(f.ftype, '__DTYPE_STRING__') AS Data_type,
        n.is_delete, n.is_active, n.run_date
 FROM "__NULLS_TABLE__" n
@@ -588,13 +592,14 @@ _KEY = re.compile(r"^[A-Za-z0-9_]+$")
 
 
 def _fill(template: str, path: str = "", table: str = "", run_date: str = "",
-          unwrap_array: bool = False, wrap_cond: str = "FALSE", nulls_table: str = "") -> str:
+          unwrap_array: bool = False, wrap_cond: str = "FALSE", nulls_table: str = "",
+          exclude_cond: str = "TRUE") -> str:
     repl = {
         "__PATH__": path.replace("'", "''"),
         "__TABLE__": table,
         "__NULLS_TABLE__": nulls_table,
         "__MISSING_TEXT__": ", ".join("'" + t.replace("'", "''") + "'" for t in MISSING_TEXT),
-        "__FILL_NUMERIC__": FILL_NUMERIC,
+        "__EXCLUDE_COND__": exclude_cond,
         "__RUN_DATE__": run_date,
         "__NUM_RE__": _NUM_RE,
         "__LEADING_ZERO_RE__": _LEADING_ZERO_RE,
@@ -621,6 +626,17 @@ def _wrap_condition(keys: Iterable[str]) -> str:
     in_list = ", ".join(f"'{k}'" for k in keys)
     return (f"json_type(cf_json1) = 'OBJECT' AND len(json_keys(cf_json1)) = 1 "
             f"AND json_keys(cf_json1)[1] IN ({in_list})")
+
+
+def _exclude_condition(names: Iterable[str]) -> str:
+    names = [n.lower() for n in names]
+    for n in names:
+        if not re.fullmatch(r"[A-Za-z0-9_]+", n):
+            raise ValueError(f"Unsafe feature name to exclude: {n!r}")
+    if not names:
+        return "TRUE"
+    in_list = ", ".join(f"'{n}'" for n in names)
+    return f"lower(regexp_extract(feature_name, '([^.]+)$', 1)) NOT IN ({in_list})"
 
 
 def _create_table_sql(table: str, if_not_exists: bool = False) -> str:
@@ -677,32 +693,33 @@ def _resolve_feature_types(type_counts: dict) -> list:
             for (m, v, f), c in type_counts.items()]
 
 
-def _fill_missing(con, table: str, nulls_table: str, type_counts: dict, fill: bool) -> None:
-    """Move the parked missing-value leaves into `table`, filled according to feature type."""
+def _type_missing(con, table: str, nulls_table: str, type_counts: dict, by_feature: bool) -> None:
+    """Move the parked missing-value leaves into `table` (Values stay NULL).
+
+    by_feature=True : Data_type is the feature's own type, so a numeric feature stays Float64.
+    by_feature=False: Data_type stays 'String' as parked.
+    """
     import pandas as pd
 
     n_missing = con.execute(f'SELECT count(*) FROM "{nulls_table}"').fetchone()[0]
-    if not n_missing:
-        return
-    if fill:
+    if n_missing and by_feature:
         ftypes = pd.DataFrame(_resolve_feature_types(type_counts),
                               columns=["modelDisplayName", "modelVersionId", "Features", "ftype"])
         con.register("_ftype_df", ftypes)
         con.execute("CREATE OR REPLACE TEMP TABLE _ftype AS SELECT * FROM _ftype_df")
         con.unregister("_ftype_df")
-        con.execute(_fill(_FILL_MISSING_SQL, table=table, nulls_table=nulls_table))
         by_type = con.execute(
             f"SELECT COALESCE(f.ftype, '{DTYPE_STRING}') AS t, count(*) FROM \"{nulls_table}\" n "
             "LEFT JOIN _ftype f ON f.modelDisplayName IS NOT DISTINCT FROM n.modelDisplayName "
             "AND f.modelVersionId IS NOT DISTINCT FROM n.modelVersionId AND f.Features = n.Features "
             "GROUP BY 1 ORDER BY 2 DESC"
         ).fetchall()
-        log.info("Missing feature values: %d filled by feature type %s "
-                 "(%s -> '%s', others -> NULL)", n_missing, by_type, DTYPE_FLOAT, FILL_NUMERIC)
+        con.execute(_fill(_TYPE_MISSING_SQL, table=table, nulls_table=nulls_table))
         con.execute("DROP TABLE _ftype")
-    else:
+        log.info("Missing feature values kept as NULL: %d, Data_type from feature %s", n_missing, by_type)
+    elif n_missing:
         con.execute(f'INSERT INTO "{table}" SELECT * FROM "{nulls_table}"')
-        log.info("Missing feature values kept as NULL (fill_missing=False): %d", n_missing)
+        log.info("Missing feature values kept as NULL (type_missing=False): %d", n_missing)
     con.execute(f'DROP TABLE "{nulls_table}"')
 
 
@@ -722,16 +739,20 @@ def build_duckdb_table(
     unwrap_keys: Iterable[str] = UNWRAP_KEYS,
     unwrap_single_element_array: bool = UNWRAP_SINGLE_ELEMENT_ARRAY,
     failure_sample_path: Optional[str] = None,
-    fill_missing: bool = True,
+    type_missing: bool = True,
+    exclude_features: Iterable[str] = EXCLUDE_FEATURES,
 ) -> str:
     """Flatten parquet files into the vector table inside a local DuckDB file.
 
     mode="replace": table is rebuilt in a staging table and swapped in only if
                     every file succeeded (a failed run never leaves a half table).
     mode="append" : rows are added to the existing table (created if missing).
-    fill_missing: a feature present in calcFeature with a missing value (null / 'null' / '')
-                    is stored as 0 (Float64) if the feature is numeric, NULL if categorical.
-                    Features absent from a row's calcFeature are never added.
+    type_missing: a feature present in calcFeature with a missing value (null / 'null' / '')
+                    is stored with Values = NULL and the feature's own Data_type (Float64 for a
+                    numeric feature) instead of 'String'. Nothing is imputed, and features absent
+                    from a row's calcFeature are never added.
+    exclude_features: calcFeature keys that are identifiers, not features (default EXCLUDE_FEATURES);
+                    matched case-insensitively on the last path segment, never loaded.
     convert_workers: processes used to convert Python-repr calcFeature to JSON
                     (default: min(8, cores-2); 1 = in-process).
     failure_sample_path: CSV for raw samples of rows that still fail to parse
@@ -748,6 +769,7 @@ def build_duckdb_table(
     run_date_s = (run_date or date.today()).isoformat()
     staging = f"{table_name}__staging"
     wrap_cond = _wrap_condition(unwrap_keys)
+    exclude_cond = _exclude_condition(exclude_features)
     workers = convert_workers or _default_workers()
     out_dir = Path(duckdb_path).resolve().parent
     sample_csv = Path(failure_sample_path) if failure_sample_path else out_dir / "calcFeature_parse_failures.csv"
@@ -797,7 +819,7 @@ def build_duckdb_table(
                 if len(bucket) < 3:
                     bucket.append(raw)
 
-            con.execute(_fill(_LEAF_SQL))
+            con.execute(_fill(_LEAF_SQL, exclude_cond=exclude_cond))
             for m, v, feat, dtype, cnt in con.execute(_TYPE_COUNTS_SQL).fetchall():
                 bucket = type_counts.setdefault((m, v, feat), {})
                 bucket[dtype] = bucket.get(dtype, 0) + cnt
@@ -809,7 +831,7 @@ def build_duckdb_table(
             log.info("[%d/%d] processed %s (converted from Python repr: calcFeature=%d, prediction=%d)",
                      i, len(files), f.name, n_cf, n_pred)
 
-        _fill_missing(con, staging, nulls, type_counts, fill_missing)
+        _type_missing(con, staging, nulls, type_counts, type_missing)
 
         if mode == "replace":
             con.execute(f'DROP TABLE IF EXISTS "{table_name}"')
@@ -878,7 +900,8 @@ def run_pipeline(
     memory_limit: Optional[str] = None,
     threads: Optional[int] = None,
     convert_workers: Optional[int] = None,
-    fill_missing: bool = True,
+    type_missing: bool = True,
+    exclude_features: Iterable[str] = EXCLUDE_FEATURES,
 ) -> str:
     """BigQuery SQL -> parquet in GCS -> DuckDB table `table_name` in `duckdb_path`.
 
@@ -896,7 +919,7 @@ def run_pipeline(
         files = download_parquet_from_gcs(bucket, gcs_prefix, tmp_root, project)
         return build_duckdb_table(files, duckdb_path, table_name, run_date, mode,
                                   memory_limit, threads, convert_workers,
-                                  fill_missing=fill_missing)
+                                  type_missing=type_missing, exclude_features=exclude_features)
     finally:
         if not keep_local_parquet:
             shutil.rmtree(tmp_root, ignore_errors=True)
