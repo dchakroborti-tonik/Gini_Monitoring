@@ -260,6 +260,11 @@ def download_parquet_from_gcs(
 UNWRAP_KEYS = ("stackScoreModel", "demoScoreModel", "appScoreModel")
 UNWRAP_SINGLE_ELEMENT_ARRAY = True
 PREDICTION_DICT_KEY = "combined_score"
+# A feature whose value is missing (JSON null, or text in MISSING_TEXT) is stored as FILL_NUMERIC
+# with Data_type Float64 when the feature is numeric, and as NULL when it is categorical/date.
+# The feature's type is the majority Data_type of its non-missing values for that model/version.
+MISSING_TEXT = ("", "null", "none", "nan")
+FILL_NUMERIC = "0"
 
 # Numeric text: 12, -3.5, .5, 1e-5  (leading-zero strings like '007' stay String: ids/zip codes)
 _NUM_RE = r'^\s*[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?\s*$'
@@ -484,21 +489,10 @@ QUALIFY row_number() OVER (PARTITION BY modelDisplayName, modelVersionId, Data_s
                            ORDER BY rid) <= 3
 """
 
-_INSERT_SQL = r"""
-INSERT INTO "__TABLE__"
--- (a) Prediction row
-SELECT customerId, digitalLoanAccountId, modelDisplayName, modelVersionId, trenchCategory,
-       deviceOs, new_loan_type, application_date, Data_selection,
-       'Prediction' AS Features,
-       CAST(pred_num AS VARCHAR) AS "Values",
-       '__DTYPE_FLOAT__' AS Data_type,
-       FALSE AS is_delete, TRUE AS is_active, DATE '__RUN_DATE__' AS run_date
-FROM sj
-WHERE pred_num IS NOT NULL AND isfinite(pred_num)
-
-UNION ALL
-
--- (b) one row per leaf of calcFeature (objects and arrays flattened to any depth)
+# One row per leaf of calcFeature (objects and arrays flattened to any depth). Text that only
+# stands for "missing" ('', null, none, nan) becomes a real NULL so that it is filled below.
+_LEAF_SQL = r"""
+CREATE OR REPLACE TEMP TABLE leaf AS
 SELECT customerId, digitalLoanAccountId, modelDisplayName, modelVersionId, trenchCategory,
        deviceOs, new_loan_type, application_date, Data_selection,
        feature_name AS Features,
@@ -513,20 +507,80 @@ SELECT customerId, digitalLoanAccountId, modelDisplayName, modelVersionId, trenc
          WHEN regexp_matches(v, '__NUM_RE__')
               AND NOT regexp_matches(v, '__LEADING_ZERO_RE__')   THEN '__DTYPE_FLOAT__'
          ELSE '__DTYPE_STRING__'
-       END AS Data_type,
-       FALSE AS is_delete, TRUE AS is_active, DATE '__RUN_DATE__' AS run_date
+       END AS Data_type
 FROM (
-  SELECT s.customerId, s.digitalLoanAccountId, s.modelDisplayName, s.modelVersionId,
-         s.trenchCategory, s.deviceOs, s.new_loan_type, s.application_date, s.Data_selection,
-         -- '$.a.b[0].c' -> 'a.b[0].c' ; '$."my key"' -> 'my key'
-         replace(regexp_replace(jt.fullkey, '^\$\.?', ''), '"', '') AS feature_name,
-         json_extract_string(jt.atom, '$')                          AS v,
-         jt.type                                                    AS jtype
-  FROM (SELECT * FROM sj WHERE cf_json IS NOT NULL) s,
-       json_tree(s.cf_json) jt
-  WHERE jt.type NOT IN ('OBJECT', 'ARRAY')   -- leaves only (incl. JSON null)
-    AND jt.fullkey <> '$'
-) f
+  SELECT customerId, digitalLoanAccountId, modelDisplayName, modelVersionId, trenchCategory,
+         deviceOs, new_loan_type, application_date, Data_selection, feature_name, jtype,
+         CASE WHEN lower(trim(raw_v)) IN (__MISSING_TEXT__) THEN NULL ELSE raw_v END AS v
+  FROM (
+    SELECT s.customerId, s.digitalLoanAccountId, s.modelDisplayName, s.modelVersionId,
+           s.trenchCategory, s.deviceOs, s.new_loan_type, s.application_date, s.Data_selection,
+           -- '$.a.b[0].c' -> 'a.b[0].c' ; '$."my key"' -> 'my key'
+           replace(regexp_replace(jt.fullkey, '^\$\.?', ''), '"', '') AS feature_name,
+           json_extract_string(jt.atom, '$')                          AS raw_v,
+           jt.type                                                    AS jtype
+    FROM (SELECT * FROM sj WHERE cf_json IS NOT NULL) s,
+         json_tree(s.cf_json) jt
+    WHERE jt.type NOT IN ('OBJECT', 'ARRAY')   -- leaves only (incl. JSON null)
+      AND jt.fullkey <> '$'
+  )
+)
+"""
+
+# Prediction rows + leaves that have a value go straight to the table ...
+_INSERT_SQL = r"""
+INSERT INTO "__TABLE__"
+SELECT customerId, digitalLoanAccountId, modelDisplayName, modelVersionId, trenchCategory,
+       deviceOs, new_loan_type, application_date, Data_selection,
+       'Prediction' AS Features,
+       CAST(pred_num AS VARCHAR) AS "Values",
+       '__DTYPE_FLOAT__' AS Data_type,
+       FALSE AS is_delete, TRUE AS is_active, DATE '__RUN_DATE__' AS run_date
+FROM sj
+WHERE pred_num IS NOT NULL AND isfinite(pred_num)
+
+UNION ALL
+
+SELECT customerId, digitalLoanAccountId, modelDisplayName, modelVersionId, trenchCategory,
+       deviceOs, new_loan_type, application_date, Data_selection,
+       Features, "Values", Data_type,
+       FALSE AS is_delete, TRUE AS is_active, DATE '__RUN_DATE__' AS run_date
+FROM leaf
+WHERE "Values" IS NOT NULL
+"""
+
+# ... leaves whose value is missing wait in a side table until every file has been read,
+# because the feature's type (numeric / categorical / date) is only known from all rows.
+_INSERT_MISSING_SQL = r"""
+INSERT INTO "__NULLS_TABLE__"
+SELECT customerId, digitalLoanAccountId, modelDisplayName, modelVersionId, trenchCategory,
+       deviceOs, new_loan_type, application_date, Data_selection,
+       Features, NULL, Data_type,
+       FALSE AS is_delete, TRUE AS is_active, DATE '__RUN_DATE__' AS run_date
+FROM leaf
+WHERE "Values" IS NULL
+"""
+
+_TYPE_COUNTS_SQL = r"""
+SELECT modelDisplayName, modelVersionId, Features, Data_type, count(*)
+FROM leaf WHERE "Values" IS NOT NULL
+GROUP BY ALL
+"""
+
+# missing value -> 0 for numeric features, NULL for categorical / date features
+_FILL_MISSING_SQL = r"""
+INSERT INTO "__TABLE__"
+SELECT n.customerId, n.digitalLoanAccountId, n.modelDisplayName, n.modelVersionId,
+       n.trenchCategory, n.deviceOs, n.new_loan_type, n.application_date, n.Data_selection,
+       n.Features,
+       CASE WHEN f.ftype = '__DTYPE_FLOAT__' THEN '__FILL_NUMERIC__' END AS "Values",
+       COALESCE(f.ftype, '__DTYPE_STRING__') AS Data_type,
+       n.is_delete, n.is_active, n.run_date
+FROM "__NULLS_TABLE__" n
+LEFT JOIN _ftype f
+  ON  f.modelDisplayName IS NOT DISTINCT FROM n.modelDisplayName
+  AND f.modelVersionId   IS NOT DISTINCT FROM n.modelVersionId
+  AND f.Features         = n.Features
 """
 
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -534,10 +588,13 @@ _KEY = re.compile(r"^[A-Za-z0-9_]+$")
 
 
 def _fill(template: str, path: str = "", table: str = "", run_date: str = "",
-          unwrap_array: bool = False, wrap_cond: str = "FALSE") -> str:
+          unwrap_array: bool = False, wrap_cond: str = "FALSE", nulls_table: str = "") -> str:
     repl = {
         "__PATH__": path.replace("'", "''"),
         "__TABLE__": table,
+        "__NULLS_TABLE__": nulls_table,
+        "__MISSING_TEXT__": ", ".join("'" + t.replace("'", "''") + "'" for t in MISSING_TEXT),
+        "__FILL_NUMERIC__": FILL_NUMERIC,
         "__RUN_DATE__": run_date,
         "__NUM_RE__": _NUM_RE,
         "__LEADING_ZERO_RE__": _LEADING_ZERO_RE,
@@ -614,6 +671,41 @@ def _repair(con, raw_col: str, fix_table: str, predicate: str, fn, pool,
     return n
 
 
+def _resolve_feature_types(type_counts: dict) -> list:
+    """(model, version, feature) -> majority Data_type of its non-missing values (tie -> String)."""
+    return [(m, v, f, max(c.items(), key=lambda kv: (kv[1], kv[0] == DTYPE_STRING))[0])
+            for (m, v, f), c in type_counts.items()]
+
+
+def _fill_missing(con, table: str, nulls_table: str, type_counts: dict, fill: bool) -> None:
+    """Move the parked missing-value leaves into `table`, filled according to feature type."""
+    import pandas as pd
+
+    n_missing = con.execute(f'SELECT count(*) FROM "{nulls_table}"').fetchone()[0]
+    if not n_missing:
+        return
+    if fill:
+        ftypes = pd.DataFrame(_resolve_feature_types(type_counts),
+                              columns=["modelDisplayName", "modelVersionId", "Features", "ftype"])
+        con.register("_ftype_df", ftypes)
+        con.execute("CREATE OR REPLACE TEMP TABLE _ftype AS SELECT * FROM _ftype_df")
+        con.unregister("_ftype_df")
+        con.execute(_fill(_FILL_MISSING_SQL, table=table, nulls_table=nulls_table))
+        by_type = con.execute(
+            f"SELECT COALESCE(f.ftype, '{DTYPE_STRING}') AS t, count(*) FROM \"{nulls_table}\" n "
+            "LEFT JOIN _ftype f ON f.modelDisplayName IS NOT DISTINCT FROM n.modelDisplayName "
+            "AND f.modelVersionId IS NOT DISTINCT FROM n.modelVersionId AND f.Features = n.Features "
+            "GROUP BY 1 ORDER BY 2 DESC"
+        ).fetchall()
+        log.info("Missing feature values: %d filled by feature type %s "
+                 "(%s -> '%s', others -> NULL)", n_missing, by_type, DTYPE_FLOAT, FILL_NUMERIC)
+        con.execute("DROP TABLE _ftype")
+    else:
+        con.execute(f'INSERT INTO "{table}" SELECT * FROM "{nulls_table}"')
+        log.info("Missing feature values kept as NULL (fill_missing=False): %d", n_missing)
+    con.execute(f'DROP TABLE "{nulls_table}"')
+
+
 def _default_workers() -> int:
     return max(1, min(8, (os.cpu_count() or 2) - 2))
 
@@ -630,12 +722,16 @@ def build_duckdb_table(
     unwrap_keys: Iterable[str] = UNWRAP_KEYS,
     unwrap_single_element_array: bool = UNWRAP_SINGLE_ELEMENT_ARRAY,
     failure_sample_path: Optional[str] = None,
+    fill_missing: bool = True,
 ) -> str:
     """Flatten parquet files into the vector table inside a local DuckDB file.
 
     mode="replace": table is rebuilt in a staging table and swapped in only if
                     every file succeeded (a failed run never leaves a half table).
     mode="append" : rows are added to the existing table (created if missing).
+    fill_missing: a feature present in calcFeature with a missing value (null / 'null' / '')
+                    is stored as 0 (Float64) if the feature is numeric, NULL if categorical.
+                    Features absent from a row's calcFeature are never added.
     convert_workers: processes used to convert Python-repr calcFeature to JSON
                     (default: min(8, cores-2); 1 = in-process).
     failure_sample_path: CSV for raw samples of rows that still fail to parse
@@ -666,6 +762,8 @@ def build_duckdb_table(
     con = duckdb.connect(duckdb_path)
     stats: dict = {}
     samples: dict = {}
+    type_counts: dict = {}          # (model, version, feature) -> {Data_type: n non-missing values}
+    nulls = f"{table_name}__missing"
     try:
         if memory_limit:
             con.execute(f"SET memory_limit='{memory_limit}'")
@@ -676,6 +774,8 @@ def build_duckdb_table(
 
         con.execute(f'DROP TABLE IF EXISTS "{staging}"')
         con.execute(_create_table_sql(staging))
+        con.execute(f'DROP TABLE IF EXISTS "{nulls}"')
+        con.execute(_create_table_sql(nulls))
 
         for i, f in enumerate(files, 1):
             path = str(f)
@@ -697,11 +797,19 @@ def build_duckdb_table(
                 if len(bucket) < 3:
                     bucket.append(raw)
 
+            con.execute(_fill(_LEAF_SQL))
+            for m, v, feat, dtype, cnt in con.execute(_TYPE_COUNTS_SQL).fetchall():
+                bucket = type_counts.setdefault((m, v, feat), {})
+                bucket[dtype] = bucket.get(dtype, 0) + cnt
             con.execute(_fill(_INSERT_SQL, table=staging, run_date=run_date_s))
+            con.execute(_fill(_INSERT_MISSING_SQL, nulls_table=nulls, run_date=run_date_s))
+            con.execute("DROP TABLE leaf")
             con.execute("DROP TABLE sj")
             con.execute("DROP TABLE src")
             log.info("[%d/%d] processed %s (converted from Python repr: calcFeature=%d, prediction=%d)",
                      i, len(files), f.name, n_cf, n_pred)
+
+        _fill_missing(con, staging, nulls, type_counts, fill_missing)
 
         if mode == "replace":
             con.execute(f'DROP TABLE IF EXISTS "{table_name}"')
@@ -770,6 +878,7 @@ def run_pipeline(
     memory_limit: Optional[str] = None,
     threads: Optional[int] = None,
     convert_workers: Optional[int] = None,
+    fill_missing: bool = True,
 ) -> str:
     """BigQuery SQL -> parquet in GCS -> DuckDB table `table_name` in `duckdb_path`.
 
@@ -786,7 +895,8 @@ def run_pipeline(
     try:
         files = download_parquet_from_gcs(bucket, gcs_prefix, tmp_root, project)
         return build_duckdb_table(files, duckdb_path, table_name, run_date, mode,
-                                  memory_limit, threads, convert_workers)
+                                  memory_limit, threads, convert_workers,
+                                  fill_missing=fill_missing)
     finally:
         if not keep_local_parquet:
             shutil.rmtree(tmp_root, ignore_errors=True)
