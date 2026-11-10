@@ -739,8 +739,8 @@ with modelname as
     else trenchCategory end  as trenchCategory,
     REPLACE(REPLACE(calcFeature, "'", '"'), "None", "null") AS calcFeature,
     deviceOs osType,
-    FROM prj-prod-dataplatform.audit_balance.ml_model_run_details mmrd
-  left join prj-prod-dataplatform.risk_credit_mis.model_loan_score_mart mt on mt.digitalLoanAccountId = mmrd.digitalLoanAccountId
+    FROM `prj-prod-dataplatform.audit_balance.ml_model_run_details` mmrd
+  left join `prj-prod-dataplatform.risk_credit_mis.model_loan_score_mart` mt on mt.digitalLoanAccountId = mmrd.digitalLoanAccountId
   WHERE modelDisplayName in ('Beta-Cash-Stack-Model', 'beta_stack_model_cash')
   -- and modelVersionId = 'v1'
       ),
@@ -756,7 +756,7 @@ case when obs_min_inst_def10 >=1 then 1 else 0 end flg_mature_fpd10,
 case when obs_min_inst_def30 >=1 then 1 else 0 end flg_mature_fpd30,
 case when obs_min_inst_def30 >=2 then 1 else 0 end flg_mature_fspd_30,
 case when obs_min_inst_def30 >=3 then 1 else 0 end flg_mature_fstpd_30
-from prj-prod-dataplatform.risk_credit_mis.loan_deliquency_data),
+from `prj-prod-dataplatform.risk_credit_mis.loan_deliquency_data`),
 segmentdata AS (
     SELECT
       loan.customerid,
@@ -789,7 +789,7 @@ segmentdata AS (
           flagApproval,
           tsa_onboarding_time,
           offer_id
-        FROM `risk_credit_mis.loan_master_table`
+        FROM `prj-prod-dataplatform.risk_credit_mis.loan_master_table`
         WHERE
           date(decision_date) >= date('2025-11-10') AND new_loan_type = 'Quick'
         -- QUALIFY ROW_NUMBER() OVER(PARTITION BY customerId ORDER BY decision_date desc)=1
@@ -804,7 +804,7 @@ segmentdata AS (
             WHEN trenchCategory = 'Trench 3' THEN 'Trench-3'
             END AS trenchCategory,
           publish_time
-        FROM `audit_balance.ml_model_run_details`
+        FROM `prj-prod-dataplatform.audit_balance.ml_model_run_details`
         WHERE
          modelDisplayName in ('Beta-Cash-Stack-Model', 'beta_stack_model_cash')
         QUALIFY
@@ -817,7 +817,7 @@ segmentdata AS (
       (
         SELECT
           cust_id, risk_segment, created_date, created_by, offer_id
-        FROM `dl_loans_db_raw.tdbk_loan_offers_trx`
+        FROM `prj-prod-dataplatform.dl_loans_db_raw.tdbk_loan_offers_trx`
         WHERE offer_type = 'SEGMENTED_ACL'
         -- AND created_by='GCP-API-CALL'
         -- QUALIFY ROW_NUMBER() OVER(PARTITION BY cust_id ORDER BY created_date desc)=1
@@ -829,7 +829,8 @@ base as
   r.digitalLoanAccountId,
   loanmaster.loanAccountNumber,
   r.modelDisplayName,
-  coalesce(cast(JSON_VALUE(SAFE.PARSE_JSON(CAST(calcFeature AS STRING)), '$.credo_score')AS FLOAT64), cast(JSON_VALUE(SAFE.PARSE_JSON(CAST(calcFeature AS STRING)), '$.credo_score')AS FLOAT64)) AS credo_score,
+  -- FIXED: Replaced standard CAST with SAFE_CAST to prevent 'Bad double value: null' error
+  SAFE_CAST(JSON_VALUE(SAFE.PARSE_JSON(CAST(calcFeature AS STRING)), '$.credo_score') AS FLOAT64) AS credo_score,
   calcFeature,
   coalesce(IF(loanmaster.new_loan_type = 'Flex-up', loanmaster.startApplyDateTime, loanmaster.termsAndConditionsSubmitDateTime),  cast(r.start_time as datetime)) AS appln_submit_datetime,
   date(loanmaster.disbursementDateTime) disbursementdate,
@@ -864,17 +865,17 @@ base as
              coalesce(sd.risk_segment, 'NA') risk_segment,
     coalesce(frs.risk_segment_final, 'NA') risk_segment_final
   from modelname r
-  left join risk_credit_mis.loan_master_table loanmaster  ON loanmaster.digitalLoanAccountId = r.digitalLoanAccountId
+  left join `prj-prod-dataplatform.risk_credit_mis.loan_master_table` loanmaster  ON loanmaster.digitalLoanAccountId = r.digitalLoanAccountId
   left join deliquency del on del.loanAccountNumber = loanmaster.loanAccountNumber
-   left join(SELECT DISTINCT mer_refferal_code, mer_name mer_name,store_type,store_tagging FROM `dl_loans_db_raw.tdbk_merchant_refferal_mtb`
-  left join worktable_datachampions.TARGET_SPLIT P on P.STORE_NAME = mer_name
+   left join(SELECT DISTINCT mer_refferal_code, mer_name mer_name,store_type,store_tagging FROM `prj-prod-dataplatform.dl_loans_db_raw.tdbk_merchant_refferal_mtb`
+  left join `prj-prod-dataplatform.worktable_datachampions.TARGET_SPLIT` P on P.STORE_NAME = mer_name
  qualify row_number() over(partition by mer_refferal_code order by  created_dt desc)=1) sil_category on loanmaster.purpleKey=sil_category.mer_refferal_code
     LEFT JOIN segmentdata sd
       ON sd.digitalLoanAccountId = loanmaster.digitalLoanAccountId
     LEFT JOIN
       (
         SELECT digitalLoanAccountid, risk_segment_final
-        FROM prj-prod-dataplatform.dl_loans_db_raw.tdbk_loan_poi3_response
+        FROM `prj-prod-dataplatform.dl_loans_db_raw.tdbk_loan_poi3_response`
         WHERE risk_segment_final IS NOT NULL
         QUALIFY
           row_number()
