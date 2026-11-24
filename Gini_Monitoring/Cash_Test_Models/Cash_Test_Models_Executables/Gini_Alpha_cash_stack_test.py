@@ -18,6 +18,7 @@ import gcsfs
 import joblib
 import matplotlib.pyplot as plt
 import numpy as np
+
 # %%
 # %% [markdown]
 # # Jupyter Notebook Loading Header
@@ -31,9 +32,9 @@ import seaborn as sns
 from google.cloud import bigquery, storage
 from sklearn.metrics import roc_auc_score
 
-path = r'C:\Users\Dwaipayan\AppData\Roaming\gcloud\application_default_credentials.json'
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = path
-client = bigquery.Client(project='prj-prod-dataplatform')
+path = r"C:\Users\Dwaipayan\AppData\Roaming\gcloud\application_default_credentials.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = path
+client = bigquery.Client(project="prj-prod-dataplatform")
 os.environ["GOOGLE_CLOUD_PROJECT"] = "prj-prod-dataplatform"
 
 import warnings
@@ -43,11 +44,12 @@ warnings.filterwarnings("ignore")
 # %% [markdown]
 ## Configure Settings
 # Set options or configurations as needed
-pd.set_option('display.max_columns', None)
+pd.set_option("display.max_columns", None)
 pd.set_option("Display.max_rows", 100)
 
 # %% [markdown]
 # ## 🏗️Functions
+
 
 # %%
 def calculate_gini(scores, labels):
@@ -81,12 +83,14 @@ def calculate_gini(scores, labels):
     except Exception:
         return np.nan
 
+
 # %% [markdown]
 # ### Gini Optimized
 
 from itertools import combinations
 
 import numpy as np
+
 # %%
 import pandas as pd
 from scipy.stats import rankdata
@@ -191,7 +195,9 @@ def calculate_periodic_gini_prod_ver_trench_dimfact(
     if loan_type_column:
         segment_defs.append(("LoanType", loan_type_column, "loan_type"))
     if loan_product_type_column:
-        segment_defs.append(("ProductType", loan_product_type_column, "loan_product_type"))
+        segment_defs.append(
+            ("ProductType", loan_product_type_column, "loan_product_type")
+        )
     if ostype_column:
         segment_defs.append(("OSType", ostype_column, "ostype"))
     if apptype_column:
@@ -199,11 +205,20 @@ def calculate_periodic_gini_prod_ver_trench_dimfact(
     if risk_segment_column:
         segment_defs.append(("risk_segment", risk_segment_column, "risk_segment"))
     if risk_segment_final_column:
-        segment_defs.append(("risk_segment_final", risk_segment_final_column, "risk_segment_final"))
+        segment_defs.append(
+            ("risk_segment_final", risk_segment_final_column, "risk_segment_final")
+        )
 
     all_output_fields = [
-        "data_selection", "model_version", "trench_category", "loan_type",
-        "loan_product_type", "ostype", "apptype", "risk_segment", "risk_segment_final",
+        "data_selection",
+        "model_version",
+        "trench_category",
+        "loan_type",
+        "loan_product_type",
+        "ostype",
+        "apptype",
+        "risk_segment",
+        "risk_segment_final",
     ]
 
     scores_arr = df[score_column].to_numpy()
@@ -217,7 +232,12 @@ def calculate_periodic_gini_prod_ver_trench_dimfact(
 
     period_specs = [
         ("week", "Week", lambda ts: ts, lambda ts: ts + pd.Timedelta(days=6)),
-        ("month", "Month", lambda ts: ts, lambda ts: ts + pd.DateOffset(months=1) - pd.Timedelta(days=1)),
+        (
+            "month",
+            "Month",
+            lambda ts: ts,
+            lambda ts: ts + pd.DateOffset(months=1) - pd.Timedelta(days=1),
+        ),
     ]
 
     rows = []
@@ -244,7 +264,9 @@ def calculate_periodic_gini_prod_ver_trench_dimfact(
                     distinct_accounts = pd.unique(seg_accounts).shape[0]
                     bad_mask = seg_labels == 1
                     bad_count = (
-                        pd.unique(seg_accounts[bad_mask]).shape[0] if bad_mask.any() else 0
+                        pd.unique(seg_accounts[bad_mask]).shape[0]
+                        if bad_mask.any()
+                        else 0
                     )
                 else:
                     distinct_accounts = None
@@ -256,7 +278,9 @@ def calculate_periodic_gini_prod_ver_trench_dimfact(
                 seg_name = (
                     "Overall"
                     if not combo
-                    else "_".join(f"{disp}_{val}" for (disp, _, _), val in zip(combo, seg_values))
+                    else "_".join(
+                        f"{disp}_{val}" for (disp, _, _), val in zip(combo, seg_values)
+                    )
                 )
 
                 row = {
@@ -278,7 +302,9 @@ def calculate_periodic_gini_prod_ver_trench_dimfact(
                 rows.append(row)
 
     fact_table = pd.DataFrame(rows)
-    fact_table = fact_table.sort_values(["segment_type", "start_date"]).reset_index(drop=True)
+    fact_table = fact_table.sort_values(["segment_type", "start_date"]).reset_index(
+        drop=True
+    )
 
     dimension_table = (
         fact_table[["Model_Name", "bad_rate", "segment_type"] + all_output_fields]
@@ -288,20 +314,34 @@ def calculate_periodic_gini_prod_ver_trench_dimfact(
     dimension_table["segment_id"] = range(len(dimension_table))
 
     fact_table = fact_table.merge(
-        dimension_table[["segment_id", "Model_Name", "bad_rate", "segment_type"] + all_output_fields],
+        dimension_table[
+            ["segment_id", "Model_Name", "bad_rate", "segment_type"] + all_output_fields
+        ],
         on=["Model_Name", "bad_rate", "segment_type"] + all_output_fields,
         how="left",
     )
 
     fact_table = fact_table[
-        ["segment_id", "start_date", "end_date", "period", "gini_value", "distinct_accounts",
-         "bad_count", "Model_Name", "bad_rate", "segment_type"] + all_output_fields
+        [
+            "segment_id",
+            "start_date",
+            "end_date",
+            "period",
+            "gini_value",
+            "distinct_accounts",
+            "bad_count",
+            "Model_Name",
+            "bad_rate",
+            "segment_type",
+        ]
+        + all_output_fields
     ]
     dimension_table = dimension_table[
         ["segment_id", "Model_Name", "bad_rate", "segment_type"] + all_output_fields
     ]
 
     return fact_table, dimension_table
+
 
 # %% [markdown]
 # ### Calculate Periodic Gini Duckdb
@@ -310,6 +350,7 @@ from itertools import combinations
 
 import duckdb
 import numpy as np
+
 # %%
 import pandas as pd
 
@@ -370,7 +411,9 @@ def calculate_periodic_gini_duckdb(
     if loan_type_column:
         segment_defs.append(("LoanType", loan_type_column, "loan_type"))
     if loan_product_type_column:
-        segment_defs.append(("ProductType", loan_product_type_column, "loan_product_type"))
+        segment_defs.append(
+            ("ProductType", loan_product_type_column, "loan_product_type")
+        )
     if ostype_column:
         segment_defs.append(("OSType", ostype_column, "ostype"))
     if apptype_column:
@@ -378,11 +421,20 @@ def calculate_periodic_gini_duckdb(
     if risk_segment_column:
         segment_defs.append(("risk_segment", risk_segment_column, "risk_segment"))
     if risk_segment_final_column:
-        segment_defs.append(("risk_segment_final", risk_segment_final_column, "risk_segment_final"))
+        segment_defs.append(
+            ("risk_segment_final", risk_segment_final_column, "risk_segment_final")
+        )
 
     all_output_fields = [
-        "data_selection", "model_version", "trench_category", "loan_type",
-        "loan_product_type", "ostype", "apptype", "risk_segment", "risk_segment_final",
+        "data_selection",
+        "model_version",
+        "trench_category",
+        "loan_type",
+        "loan_product_type",
+        "ostype",
+        "apptype",
+        "risk_segment",
+        "risk_segment_final",
     ]
 
     con = con or duckdb.connect()
@@ -394,7 +446,12 @@ def calculate_periodic_gini_duckdb(
 
     period_specs = [
         ("week", "Week", lambda ts: ts, lambda ts: ts + pd.Timedelta(days=6)),
-        ("month", "Month", lambda ts: ts, lambda ts: ts + pd.DateOffset(months=1) - pd.Timedelta(days=1)),
+        (
+            "month",
+            "Month",
+            lambda ts: ts,
+            lambda ts: ts + pd.DateOffset(months=1) - pd.Timedelta(days=1),
+        ),
     ]
 
     all_rows = []
@@ -408,7 +465,8 @@ def calculate_periodic_gini_duckdb(
             acct_agg = (
                 f', COUNT(DISTINCT "{account_id_column}") AS distinct_accounts'
                 f', COUNT(DISTINCT "{account_id_column}") FILTER (WHERE lbl = 1) AS bad_count'
-                if account_id_column else ", NULL AS distinct_accounts, NULL AS bad_count"
+                if account_id_column
+                else ", NULL AS distinct_accounts, NULL AS bad_count"
             )
 
             query = f"""
@@ -444,17 +502,28 @@ def calculate_periodic_gini_duckdb(
 
             for _, r_ in res.iterrows():
                 seg_values = tuple(r_[c] for c in combo_cols)
-                period_value = pd.Period(r_[period_col], freq="W" if period_col == "week" else "M")
+                period_value = pd.Period(
+                    r_[period_col], freq="W" if period_col == "week" else "M"
+                )
                 start_date = start_fn(period_value.to_timestamp())
                 end_date = end_fn(period_value.to_timestamp())
-                seg_name = "Overall" if not combo else "_".join(
-                    f"{disp}_{val}" for (disp, _, _), val in zip(combo, seg_values)
+                seg_name = (
+                    "Overall"
+                    if not combo
+                    else "_".join(
+                        f"{disp}_{val}" for (disp, _, _), val in zip(combo, seg_values)
+                    )
                 )
                 row = {
-                    "start_date": start_date, "end_date": end_date, "period": period_label,
-                    "gini_value": r_["gini_value"], "distinct_accounts": r_["distinct_accounts"],
-                    "bad_count": r_["bad_count"], "Model_Name": score_column,
-                    "bad_rate": namecolumn, "segment_type": seg_name,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "period": period_label,
+                    "gini_value": r_["gini_value"],
+                    "distinct_accounts": r_["distinct_accounts"],
+                    "bad_count": r_["bad_count"],
+                    "Model_Name": score_column,
+                    "bad_rate": namecolumn,
+                    "segment_type": seg_name,
                 }
                 for field in all_output_fields:
                     row[field] = None
@@ -462,22 +531,44 @@ def calculate_periodic_gini_duckdb(
                     row[field] = val
                 all_rows.append(row)
 
-    fact_table = pd.DataFrame(all_rows).sort_values(["segment_type", "start_date"]).reset_index(drop=True)
+    fact_table = (
+        pd.DataFrame(all_rows)
+        .sort_values(["segment_type", "start_date"])
+        .reset_index(drop=True)
+    )
     dimension_table = (
         fact_table[["Model_Name", "bad_rate", "segment_type"] + all_output_fields]
-        .drop_duplicates().reset_index(drop=True)
+        .drop_duplicates()
+        .reset_index(drop=True)
     )
     dimension_table["segment_id"] = range(len(dimension_table))
     fact_table = fact_table.merge(
-        dimension_table[["segment_id", "Model_Name", "bad_rate", "segment_type"] + all_output_fields],
-        on=["Model_Name", "bad_rate", "segment_type"] + all_output_fields, how="left",
+        dimension_table[
+            ["segment_id", "Model_Name", "bad_rate", "segment_type"] + all_output_fields
+        ],
+        on=["Model_Name", "bad_rate", "segment_type"] + all_output_fields,
+        how="left",
     )
     fact_table = fact_table[
-        ["segment_id", "start_date", "end_date", "period", "gini_value", "distinct_accounts",
-         "bad_count", "Model_Name", "bad_rate", "segment_type"] + all_output_fields
+        [
+            "segment_id",
+            "start_date",
+            "end_date",
+            "period",
+            "gini_value",
+            "distinct_accounts",
+            "bad_count",
+            "Model_Name",
+            "bad_rate",
+            "segment_type",
+        ]
+        + all_output_fields
     ]
-    dimension_table = dimension_table[["segment_id", "Model_Name", "bad_rate", "segment_type"] + all_output_fields]
+    dimension_table = dimension_table[
+        ["segment_id", "Model_Name", "bad_rate", "segment_type"] + all_output_fields
+    ]
     return fact_table, dimension_table
+
 
 # %% [markdown]
 # ### Calculate Gini Multiprocessing
@@ -487,6 +578,7 @@ from concurrent.futures import ProcessPoolExecutor
 from itertools import combinations
 
 import numpy as np
+
 # %%
 import pandas as pd
 from scipy.stats import rankdata
@@ -562,7 +654,9 @@ def _process_task(task):
             seg_accounts = accounts_arr[idx]
             distinct_accounts = pd.unique(seg_accounts).shape[0]
             bad_mask = seg_labels == 1
-            bad_count = pd.unique(seg_accounts[bad_mask]).shape[0] if bad_mask.any() else 0
+            bad_count = (
+                pd.unique(seg_accounts[bad_mask]).shape[0] if bad_mask.any() else 0
+            )
         else:
             distinct_accounts, bad_count = None, None
 
@@ -570,15 +664,25 @@ def _process_task(task):
         if period_col == "week":
             start_date, end_date = ts, ts + pd.Timedelta(days=6)
         else:
-            start_date, end_date = ts, ts + pd.DateOffset(months=1) - pd.Timedelta(days=1)
+            start_date, end_date = ts, ts + pd.DateOffset(months=1) - pd.Timedelta(
+                days=1
+            )
 
-        seg_name = "Overall" if not combo else "_".join(
-            f"{disp}_{val}" for (disp, _, _), val in zip(combo, seg_values)
+        seg_name = (
+            "Overall"
+            if not combo
+            else "_".join(
+                f"{disp}_{val}" for (disp, _, _), val in zip(combo, seg_values)
+            )
         )
         row = {
-            "start_date": start_date, "end_date": end_date, "period": period_label,
-            "gini_value": gini_value, "distinct_accounts": distinct_accounts,
-            "bad_count": bad_count, "segment_type": seg_name,
+            "start_date": start_date,
+            "end_date": end_date,
+            "period": period_label,
+            "gini_value": gini_value,
+            "distinct_accounts": distinct_accounts,
+            "bad_count": bad_count,
+            "segment_type": seg_name,
         }
         for (_, _, field), val in zip(combo, seg_values):
             row[field] = val
@@ -587,11 +691,21 @@ def _process_task(task):
 
 
 def calculate_periodic_gini_multiproc(
-    df, score_column, label_column, namecolumn,
-    data_selection_column=None, model_version_column=None, trench_column=None,
-    loan_type_column=None, loan_product_type_column=None, ostype_column=None,
-    apptype_column=None, risk_segment_column=None, risk_segment_final_column=None,
-    account_id_column=None, n_workers=None,
+    df,
+    score_column,
+    label_column,
+    namecolumn,
+    data_selection_column=None,
+    model_version_column=None,
+    trench_column=None,
+    loan_type_column=None,
+    loan_product_type_column=None,
+    ostype_column=None,
+    apptype_column=None,
+    risk_segment_column=None,
+    risk_segment_final_column=None,
+    account_id_column=None,
+    n_workers=None,
 ):
     """Same contract as the single-process optimized version. Parallelizes
     across (segment-combo, period) tasks with ProcessPoolExecutor. Best fit
@@ -608,19 +722,39 @@ def calculate_periodic_gini_multiproc(
     df["month"] = df["disbursementdate"].dt.to_period("M")
 
     segment_defs = []
-    if data_selection_column: segment_defs.append(("DataSelection", data_selection_column, "data_selection"))
-    if model_version_column: segment_defs.append(("ModelVersion", model_version_column, "model_version"))
-    if trench_column: segment_defs.append(("Trench", trench_column, "trench_category"))
-    if loan_type_column: segment_defs.append(("LoanType", loan_type_column, "loan_type"))
-    if loan_product_type_column: segment_defs.append(("ProductType", loan_product_type_column, "loan_product_type"))
-    if ostype_column: segment_defs.append(("OSType", ostype_column, "ostype"))
-    if apptype_column: segment_defs.append(("apptype", apptype_column, "apptype"))
-    if risk_segment_column: segment_defs.append(("risk_segment", risk_segment_column, "risk_segment"))
-    if risk_segment_final_column: segment_defs.append(("risk_segment_final", risk_segment_final_column, "risk_segment_final"))
+    if data_selection_column:
+        segment_defs.append(("DataSelection", data_selection_column, "data_selection"))
+    if model_version_column:
+        segment_defs.append(("ModelVersion", model_version_column, "model_version"))
+    if trench_column:
+        segment_defs.append(("Trench", trench_column, "trench_category"))
+    if loan_type_column:
+        segment_defs.append(("LoanType", loan_type_column, "loan_type"))
+    if loan_product_type_column:
+        segment_defs.append(
+            ("ProductType", loan_product_type_column, "loan_product_type")
+        )
+    if ostype_column:
+        segment_defs.append(("OSType", ostype_column, "ostype"))
+    if apptype_column:
+        segment_defs.append(("apptype", apptype_column, "apptype"))
+    if risk_segment_column:
+        segment_defs.append(("risk_segment", risk_segment_column, "risk_segment"))
+    if risk_segment_final_column:
+        segment_defs.append(
+            ("risk_segment_final", risk_segment_final_column, "risk_segment_final")
+        )
 
     all_output_fields = [
-        "data_selection", "model_version", "trench_category", "loan_type",
-        "loan_product_type", "ostype", "apptype", "risk_segment", "risk_segment_final",
+        "data_selection",
+        "model_version",
+        "trench_category",
+        "loan_type",
+        "loan_product_type",
+        "ostype",
+        "apptype",
+        "risk_segment",
+        "risk_segment_final",
     ]
 
     combos = [()]
@@ -635,8 +769,10 @@ def calculate_periodic_gini_multiproc(
     ctx = mp.get_context("fork")  # required for the zero-copy _SHARED trick; Linux only
     all_rows = []
     with ProcessPoolExecutor(
-        max_workers=n_workers, mp_context=ctx,
-        initializer=_init_shared, initargs=(df, score_column, label_column, account_id_column),
+        max_workers=n_workers,
+        mp_context=ctx,
+        initializer=_init_shared,
+        initargs=(df, score_column, label_column, account_id_column),
     ) as pool:
         for rows in pool.map(_process_task, tasks):
             all_rows.extend(rows)
@@ -647,25 +783,48 @@ def calculate_periodic_gini_multiproc(
         for field in all_output_fields:
             row.setdefault(field, None)
 
-    fact_table = pd.DataFrame(all_rows).sort_values(["segment_type", "start_date"]).reset_index(drop=True)
+    fact_table = (
+        pd.DataFrame(all_rows)
+        .sort_values(["segment_type", "start_date"])
+        .reset_index(drop=True)
+    )
     dimension_table = (
         fact_table[["Model_Name", "bad_rate", "segment_type"] + all_output_fields]
-        .drop_duplicates().reset_index(drop=True)
+        .drop_duplicates()
+        .reset_index(drop=True)
     )
     dimension_table["segment_id"] = range(len(dimension_table))
     fact_table = fact_table.merge(
-        dimension_table[["segment_id", "Model_Name", "bad_rate", "segment_type"] + all_output_fields],
-        on=["Model_Name", "bad_rate", "segment_type"] + all_output_fields, how="left",
+        dimension_table[
+            ["segment_id", "Model_Name", "bad_rate", "segment_type"] + all_output_fields
+        ],
+        on=["Model_Name", "bad_rate", "segment_type"] + all_output_fields,
+        how="left",
     )
     fact_table = fact_table[
-        ["segment_id", "start_date", "end_date", "period", "gini_value", "distinct_accounts",
-         "bad_count", "Model_Name", "bad_rate", "segment_type"] + all_output_fields
+        [
+            "segment_id",
+            "start_date",
+            "end_date",
+            "period",
+            "gini_value",
+            "distinct_accounts",
+            "bad_count",
+            "Model_Name",
+            "bad_rate",
+            "segment_type",
+        ]
+        + all_output_fields
     ]
-    dimension_table = dimension_table[["segment_id", "Model_Name", "bad_rate", "segment_type"] + all_output_fields]
+    dimension_table = dimension_table[
+        ["segment_id", "Model_Name", "bad_rate", "segment_type"] + all_output_fields
+    ]
     return fact_table, dimension_table
+
 
 # %% [markdown]
 # ### update_tables
+
 
 # %%
 def update_tables(
@@ -690,7 +849,7 @@ def update_tables(
         "loan_product_type",
         "ostype",
         "apptype",
-        "risk_segment", 
+        "risk_segment",
         "risk_segment_final",
     ]
 
@@ -716,8 +875,12 @@ def update_tables(
 # #### Alpha-Cash-Stack-Model
 
 # %%
-facttable_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.fact_alphastackcash_test2"
-dimtable_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.dimension_alphastackcash_test2"
+facttable_id = (
+    "prj-prod-dataplatform.dap_ds_poweruser_playground.fact_alphastackcash_test2"
+)
+dimtable_id = (
+    "prj-prod-dataplatform.dap_ds_poweruser_playground.dimension_alphastackcash_test2"
+)
 
 # ##
 
@@ -726,11 +889,21 @@ dimtable_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.dimension_alpha
 # %%
 sq = r"""
 WITH parsed as (
-select customerId, digitalLoanAccountId,modelDisplayName,modelVersionId,start_time,end_time,prediction,trenchCategory,
-REPLACE(REPLACE(calcFeature, "'", '"'), "None", "null") AS calcFeatures,
-    deviceOs osType,
+SELECT
+  customerId,
+  digitalLoanAccountId,
+  modelDisplayName,
+  modelVersionId,
+  start_time,
+  end_time,
+  prediction,
+  trenchCategory,
+  REPLACE(REPLACE(calcFeature, "'", '"'), "None", "null") AS calcFeatures,
+  deviceOs osType,
 FROM `prj-prod-dataplatform.audit_balance.ml_model_run_details`
-where modelDisplayName in ('Alpha-Cash-Stack-Model', 'alpha_stack_model_cash')
+WHERE
+  modelDisplayName IN ('Alpha-Cash-Stack-Model', 'alpha_stack_model_cash')
+  AND lower(modelVersionId) NOT LIKE '%shadow%'
 )
 ,
 -- model_run as (
@@ -922,8 +1095,8 @@ fact_table, dimension_table = calculate_periodic_gini_prod_ver_trench_dimfact(
     loan_type_column="new_loan_type",
     loan_product_type_column="loan_product_type",
     ostype_column="osType",
-     apptype_column="Application_type",
-     risk_segment_column="risk_segment",
+    apptype_column="Application_type",
+    risk_segment_column="risk_segment",
     risk_segment_final_column="risk_segment_final",
     account_id_column="digitalLoanAccountId",
 )
@@ -943,7 +1116,9 @@ df_d_fpd0_alphastackcash = dimension_table.copy()
 job_config = bigquery.LoadJobConfig(
     write_disposition="WRITE_TRUNCATE",  # or "WRITE_APPEND"
 )
-job = client.load_table_from_dataframe(df_f_fpd0_alphastackcash, facttable_id, job_config=job_config)
+job = client.load_table_from_dataframe(
+    df_f_fpd0_alphastackcash, facttable_id, job_config=job_config
+)
 job.result()  # Wait for the job to complete
 
 # %%
@@ -962,11 +1137,13 @@ job.result()  # Wait for the job to complete
 
 # ### Test
 
-print(f"The shape of the dataframe downloaded is:\t {dfd[dfd['flg_mature_fpd10']==1].shape}")
-dfd[dfd['flg_mature_fpd10']==1].head()
+print(
+    f"The shape of the dataframe downloaded is:\t {dfd[dfd['flg_mature_fpd10']==1].shape}"
+)
+dfd[dfd["flg_mature_fpd10"] == 1].head()
 
 # %%
-df_concat = dfd[dfd['flg_mature_fpd10']==1].copy()
+df_concat = dfd[dfd["flg_mature_fpd10"] == 1].copy()
 
 # %%
 df_concat["aStackScore"] = pd.to_numeric(df_concat["aStackScore"], errors="coerce")
@@ -984,8 +1161,8 @@ fact_table, dimension_table = calculate_periodic_gini_prod_ver_trench_dimfact(
     loan_type_column="new_loan_type",
     loan_product_type_column="loan_product_type",
     ostype_column="osType",
-     apptype_column="Application_type",
-     risk_segment_column="risk_segment",
+    apptype_column="Application_type",
+    risk_segment_column="risk_segment",
     risk_segment_final_column="risk_segment_final",
     account_id_column="digitalLoanAccountId",
 )
@@ -1003,7 +1180,9 @@ df_d_fpd10_alphastackcash = dimension_table.copy()
 job_config = bigquery.LoadJobConfig(
     write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
 )
-job = client.load_table_from_dataframe(df_f_fpd10_alphastackcash, facttable_id, job_config=job_config)
+job = client.load_table_from_dataframe(
+    df_f_fpd10_alphastackcash, facttable_id, job_config=job_config
+)
 job.result()  # Wait for the job to complete
 
 # %%
@@ -1026,11 +1205,13 @@ job.result()  # Wait for the job to complete
 
 # ### Test
 
-print(f"The shape of the dataframe downloaded for fpd30 is:\t {dfd[dfd['flg_mature_fpd30']==1].shape}")
-dfd[dfd['flg_mature_fpd30']==1].head()
+print(
+    f"The shape of the dataframe downloaded for fpd30 is:\t {dfd[dfd['flg_mature_fpd30']==1].shape}"
+)
+dfd[dfd["flg_mature_fpd30"] == 1].head()
 
 # %%
-df_concat = dfd[dfd['flg_mature_fpd30']==1].copy()
+df_concat = dfd[dfd["flg_mature_fpd30"] == 1].copy()
 
 # %%
 df_concat["aStackScore"] = pd.to_numeric(df_concat["aStackScore"], errors="coerce")
@@ -1066,7 +1247,9 @@ df_d_fpd30_alphastackcash = dimension_table.copy()
 job_config = bigquery.LoadJobConfig(
     write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
 )
-job = client.load_table_from_dataframe(df_f_fpd30_alphastackcash, facttable_id, job_config=job_config)
+job = client.load_table_from_dataframe(
+    df_f_fpd30_alphastackcash, facttable_id, job_config=job_config
+)
 job.result()  # Wait for the job to complete
 
 # %%
@@ -1086,11 +1269,13 @@ job.result()  # Wait for the job to complete
 
 # ### Test
 
-print(f"The shape of the dataframe downloaded for fspd30 is:\t {dfd[dfd['flg_mature_fspd_30']==1].shape}")
-dfd[dfd['flg_mature_fspd_30']==1].head()
+print(
+    f"The shape of the dataframe downloaded for fspd30 is:\t {dfd[dfd['flg_mature_fspd_30']==1].shape}"
+)
+dfd[dfd["flg_mature_fspd_30"] == 1].head()
 
 # %%
-df_concat = dfd[dfd['flg_mature_fspd_30']==1].copy()
+df_concat = dfd[dfd["flg_mature_fspd_30"] == 1].copy()
 
 # %%
 df_concat["aStackScore"] = pd.to_numeric(df_concat["aStackScore"], errors="coerce")
@@ -1126,7 +1311,9 @@ df_d_fspd30_alphastackcash = dimension_table.copy()
 job_config = bigquery.LoadJobConfig(
     write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
 )
-job = client.load_table_from_dataframe(df_f_fspd30_alphastackcash, facttable_id, job_config=job_config)
+job = client.load_table_from_dataframe(
+    df_f_fspd30_alphastackcash, facttable_id, job_config=job_config
+)
 job.result()  # Wait for the job to complete
 
 # %%
@@ -1143,18 +1330,19 @@ job.result()  # Wait for the job to complete
 # %%
 
 
-
 # ### FSTPD30
 
 
 # ### Test
 
 # %%
-print(f"The shape of the dataframe downloaded is:\t {dfd[dfd['flg_mature_fstpd_30']==1].shape}")
-dfd[dfd['flg_mature_fstpd_30']==1].head()
+print(
+    f"The shape of the dataframe downloaded is:\t {dfd[dfd['flg_mature_fstpd_30']==1].shape}"
+)
+dfd[dfd["flg_mature_fstpd_30"] == 1].head()
 
 # %%
-df_concat = dfd[dfd['flg_mature_fstpd_30']==1].copy()
+df_concat = dfd[dfd["flg_mature_fstpd_30"] == 1].copy()
 
 # %%
 df_concat["aStackScore"] = pd.to_numeric(df_concat["aStackScore"], errors="coerce")
@@ -1192,7 +1380,9 @@ df_d_fstpd30_alphastackcash = dimension_table.copy()
 job_config = bigquery.LoadJobConfig(
     write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
 )
-job = client.load_table_from_dataframe(df_f_fstpd30_alphastackcash, facttable_id, job_config=job_config)
+job = client.load_table_from_dataframe(
+    df_f_fstpd30_alphastackcash, facttable_id, job_config=job_config
+)
 job.result()  # Wait for the job to complete
 
 # %%
@@ -1206,8 +1396,8 @@ job = client.load_table_from_dataframe(
 )
 job.result()  # Wait for the job to complete
 
-factalphastackcash = pd.concat([df_f_fpd0_alphastackcash, df_f_fpd10_alphastackcash, df_f_fpd30_alphastackcash, df_f_fspd30_alphastackcash, df_f_fstpd30_alphastackcash], ignore_index=True)
-dimalphastackcash = pd.concat([df_d_fpd0_alphastackcash, df_d_fpd10_alphastackcash, df_d_fpd30_alphastackcash, df_d_fspd30_alphastackcash, df_d_fstpd30_alphastackcash], ignore_index=True)
+# factalphastackcash = pd.concat([df_f_fpd0_alphastackcash, df_f_fpd10_alphastackcash, df_f_fpd30_alphastackcash, df_f_fspd30_alphastackcash, df_f_fstpd30_alphastackcash], ignore_index=True)
+# dimalphastackcash = pd.concat([df_d_fpd0_alphastackcash, df_d_fpd10_alphastackcash, df_d_fpd30_alphastackcash, df_d_fspd30_alphastackcash, df_d_fstpd30_alphastackcash], ignore_index=True)
 
 print(f"The alpha_stack_model_cash gini calculation completed")
 
@@ -1217,484 +1407,483 @@ print(f"The alpha_stack_model_cash gini calculation completed")
 # %% [markdown]
 # ### calculate_periodic_gini_prod_ver_trench_dimfact
 
-from datetime import timedelta
-from itertools import combinations
-
-import numpy as np
 # %%
-import pandas as pd
+# import pandas as pd
+# import numpy as np
+# from itertools import combinations
+# from datetime import timedelta
 
 
-def calculate_gini(scores, labels):
-    """
-    Calculate Gini coefficient using ROC AUC score.
-    Gini = 2 * AUC - 1
+# def calculate_gini(scores, labels):
+#     """
+#     Calculate Gini coefficient using ROC AUC score.
+#     Gini = 2 * AUC - 1
 
-    Returns np.nan when:
-    - Fewer than 2 observations
-    - All labels are the same class (no variation in labels)
-    - AUC calculation fails
+#     Returns np.nan when:
+#     - Fewer than 2 observations
+#     - All labels are the same class (no variation in labels)
+#     - AUC calculation fails
 
-    IMPORTANT: Labels do NOT need to be 0/1. This function correctly handles
-    any binary encoding: 0/1, 1/2, True/False, etc.
-    roc_auc_score only requires exactly 2 distinct classes to be present.
-    """
-    n = len(scores)
-    if n < 2:
-        return np.nan
+#     IMPORTANT: Labels do NOT need to be 0/1. This function correctly handles
+#     any binary encoding: 0/1, 1/2, True/False, etc.
+#     roc_auc_score only requires exactly 2 distinct classes to be present.
+#     """
+#     n = len(scores)
+#     if n < 2:
+#         return np.nan
 
-    label_sum = np.sum(labels)
+#     label_sum = np.sum(labels)
 
-    # Handle case where no positive labels exist (all zeros)
-    # This prevents division by zero warning
-    if label_sum == 0:
-        return np.nan
+#     # Handle case where no positive labels exist (all zeros)
+#     # This prevents division by zero warning
+#     if label_sum == 0:
+#         return np.nan
 
-    try:
-        auc = roc_auc_score(labels, scores)
-        return 2 * auc - 1
-    except Exception:
-        return np.nan
+#     try:
+#         auc = roc_auc_score(labels, scores)
+#         return 2 * auc - 1
+#     except Exception:
+#         return np.nan
 
 
-def calculate_periodic_gini_prod_ver_trench_dimfact(
-    df,
-    score_column,
-    label_column,
-    namecolumn,
-    data_selection_column=None,
-    model_version_column=None,
-    trench_column=None,
-    loan_type_column=None,
-    loan_product_type_column=None,
-    ostype_column=None,
-    apptype_column=None,
-    risk_segment_column=None,
-    risk_segment_final_column=None,
-    account_id_column=None,
-):
-    """
-    Calculate periodic Gini coefficients and return Power BI-friendly long format
-    with fact and dimension tables.
+# def calculate_periodic_gini_prod_ver_trench_dimfact(
+#     df,
+#     score_column,
+#     label_column,
+#     namecolumn,
+#     data_selection_column=None,
+#     model_version_column=None,
+#     trench_column=None,
+#     loan_type_column=None,
+#     loan_product_type_column=None,
+#     ostype_column=None,
+#     apptype_column=None,
+#     risk_segment_column=None,
+#     risk_segment_final_column=None,
+#     account_id_column=None,
+# ):
+#     """
+#     Calculate periodic Gini coefficients and return Power BI-friendly long format
+#     with fact and dimension tables.
 
-    Returns:
-    - fact_table: Long format with one row per segment per period
-    - dimension_table: Unique segment combinations for filtering
+#     Returns:
+#     - fact_table: Long format with one row per segment per period
+#     - dimension_table: Unique segment combinations for filtering
 
-    Parameters:
-    df: DataFrame with disbursement dates and score/label columns
-    score_column: name of the score column
-    label_column: name of the label column
-    namecolumn: name for the bad rate label
-    data_selection_column: (optional) name of column for data selection (Test/Train)
-    model_version_column: (optional) name of column for model version
-    trench_column: (optional) name of column for trench category
-    loan_type_column: (optional) name of loan type column
-    loan_product_type_column: (optional) name of loan product type column
-    ostype_column: (optional) name of column for OS type
-    account_id_column: (optional) name of column for distinct account IDs
-    """
-    # Input validation
-    required_columns = ["disbursementdate", score_column, label_column]
-    if not all(col in df.columns for col in required_columns):
-        raise ValueError(f"Missing required columns. Need: {required_columns}")
+#     Parameters:
+#     df: DataFrame with disbursement dates and score/label columns
+#     score_column: name of the score column
+#     label_column: name of the label column
+#     namecolumn: name for the bad rate label
+#     data_selection_column: (optional) name of column for data selection (Test/Train)
+#     model_version_column: (optional) name of column for model version
+#     trench_column: (optional) name of column for trench category
+#     loan_type_column: (optional) name of loan type column
+#     loan_product_type_column: (optional) name of loan product type column
+#     ostype_column: (optional) name of column for OS type
+#     account_id_column: (optional) name of column for distinct account IDs
+#     """
+#     # Input validation
+#     required_columns = ["disbursementdate", score_column, label_column]
+#     if not all(col in df.columns for col in required_columns):
+#         raise ValueError(f"Missing required columns. Need: {required_columns}")
 
-    optional_columns = {
-        "data_selection": data_selection_column,
-        "model_version": model_version_column,
-        "trench": trench_column,
-        "loan_type": loan_type_column,
-        "loan_product_type": loan_product_type_column,
-        "ostype": ostype_column,
-        "apptype": apptype_column,
-        "risk_segment": risk_segment_column,
-        "risk_segment_final": risk_segment_final_column,
-        "account_id": account_id_column,
-    }
+#     optional_columns = {
+#         "data_selection": data_selection_column,
+#         "model_version": model_version_column,
+#         "trench": trench_column,
+#         "loan_type": loan_type_column,
+#         "loan_product_type": loan_product_type_column,
+#         "ostype": ostype_column,
+#         "apptype": apptype_column,
+#         "risk_segment": risk_segment_column,
+#         "risk_segment_final": risk_segment_final_column,
+#         "account_id": account_id_column,
+#     }
 
-    for col_name, col in optional_columns.items():
-        if col and col not in df.columns:
-            raise ValueError(
-                f"{col_name.replace('_', ' ').title()} column '{col}' not found in dataframe"
-            )
+#     for col_name, col in optional_columns.items():
+#         if col and col not in df.columns:
+#             raise ValueError(
+#                 f"{col_name.replace('_', ' ').title()} column '{col}' not found in dataframe"
+#             )
 
-    # Create a copy to avoid modifying original dataframe
-    df = df.copy()
+#     # Create a copy to avoid modifying original dataframe
+#     df = df.copy()
 
-    # Ensure date is datetime type
-    df["disbursementdate"] = pd.to_datetime(df["disbursementdate"])
+#     # Ensure date is datetime type
+#     df["disbursementdate"] = pd.to_datetime(df["disbursementdate"])
 
-    # Ensure score and label columns are numeric
-    df[score_column] = pd.to_numeric(df[score_column], errors="coerce")
-    df[label_column] = pd.to_numeric(df[label_column], errors="coerce")
+#     # Ensure score and label columns are numeric
+#     df[score_column] = pd.to_numeric(df[score_column], errors="coerce")
+#     df[label_column] = pd.to_numeric(df[label_column], errors="coerce")
 
-    # Drop rows with invalid values
-    df = df.dropna(subset=[score_column, label_column])
+#     # Drop rows with invalid values
+#     df = df.dropna(subset=[score_column, label_column])
 
-    # Define list of datasets to process
-    datasets_to_process = [("Overall", df, {})]
+#     # Define list of datasets to process
+#     datasets_to_process = [("Overall", df, {})]
 
-    # Create list of available segment columns
-    segment_columns = []
-    if data_selection_column:
-        segment_columns.append(("DataSelection", data_selection_column))
-    if model_version_column:
-        segment_columns.append(("ModelVersion", model_version_column))
-    if trench_column:
-        segment_columns.append(("Trench", trench_column))
-    if loan_type_column:
-        segment_columns.append(("LoanType", loan_type_column))
-    if loan_product_type_column:
-        segment_columns.append(("ProductType", loan_product_type_column))
-    if ostype_column:
-        segment_columns.append(("OSType", ostype_column))
-    if apptype_column:
-        segment_columns.append(("apptype", apptype_column))
-    if risk_segment_column:
-        segment_columns.append(("risk_segment", risk_segment_column))
-    if risk_segment_final_column:
-        segment_columns.append(("risk_segment_final", risk_segment_final_column))
+#     # Create list of available segment columns
+#     segment_columns = []
+#     if data_selection_column:
+#         segment_columns.append(("DataSelection", data_selection_column))
+#     if model_version_column:
+#         segment_columns.append(("ModelVersion", model_version_column))
+#     if trench_column:
+#         segment_columns.append(("Trench", trench_column))
+#     if loan_type_column:
+#         segment_columns.append(("LoanType", loan_type_column))
+#     if loan_product_type_column:
+#         segment_columns.append(("ProductType", loan_product_type_column))
+#     if ostype_column:
+#         segment_columns.append(("OSType", ostype_column))
+#     if apptype_column:
+#         segment_columns.append(("apptype", apptype_column))
+#     if risk_segment_column:
+#         segment_columns.append(("risk_segment", risk_segment_column))
+#     if risk_segment_final_column:
+#         segment_columns.append(("risk_segment_final", risk_segment_final_column))
 
-    # Generate all possible combinations of segment columns
-    for r in range(1, len(segment_columns) + 1):
-        for combo in combinations(segment_columns, r):
+#     # Generate all possible combinations of segment columns
+#     for r in range(1, len(segment_columns) + 1):
+#         for combo in combinations(segment_columns, r):
 
-            def generate_combinations(
-                df, segment_columns, index=0, current_filter=None, current_name=""
-            ):
-                if current_filter is None:
-                    current_filter = {}
+#             def generate_combinations(
+#                 df, segment_columns, index=0, current_filter=None, current_name=""
+#             ):
+#                 if current_filter is None:
+#                     current_filter = {}
 
-                if index >= len(segment_columns):
-                    filtered_df = df
-                    for col, val in current_filter.items():
-                        filtered_df = filtered_df[filtered_df[col] == val]
+#                 if index >= len(segment_columns):
+#                     filtered_df = df
+#                     for col, val in current_filter.items():
+#                         filtered_df = filtered_df[filtered_df[col] == val]
 
-                    if len(filtered_df) > 0:
-                        yield (
-                            current_name.strip("_"),
-                            filtered_df,
-                            current_filter.copy(),
-                        )
-                    return
+#                     if len(filtered_df) > 0:
+#                         yield (
+#                             current_name.strip("_"),
+#                             filtered_df,
+#                             current_filter.copy(),
+#                         )
+#                     return
 
-                seg_name, seg_col = segment_columns[index]
-                for seg_value in sorted(df[seg_col].dropna().unique()):
-                    new_filter = current_filter.copy()
-                    new_filter[seg_col] = seg_value
-                    new_name = current_name + f"{seg_name}_{seg_value}_"
+#                 seg_name, seg_col = segment_columns[index]
+#                 for seg_value in sorted(df[seg_col].dropna().unique()):
+#                     new_filter = current_filter.copy()
+#                     new_filter[seg_col] = seg_value
+#                     new_name = current_name + f"{seg_name}_{seg_value}_"
 
-                    yield from generate_combinations(
-                        df, segment_columns, index + 1, new_filter, new_name
-                    )
+#                     yield from generate_combinations(
+#                         df, segment_columns, index + 1, new_filter, new_name
+#                     )
 
-            for combo_name, combo_df, combo_metadata in generate_combinations(
-                df, list(combo)
-            ):
-                datasets_to_process.append((combo_name, combo_df, combo_metadata))
+#             for combo_name, combo_df, combo_metadata in generate_combinations(
+#                 df, list(combo)
+#             ):
+#                 datasets_to_process.append((combo_name, combo_df, combo_metadata))
 
-    all_results = []
+#     all_results = []
 
-    # Process each dataset
-    for dataset_name, dataset_df, metadata in datasets_to_process:
-        # Calculate weekly Gini
-        dataset_df_copy = dataset_df.copy()
-        dataset_df_copy["week"] = dataset_df_copy["disbursementdate"].dt.to_period("W")
-        weekly_gini = (
-            dataset_df_copy.groupby("week")
-            .apply(
-                lambda x: (
-                    calculate_gini(x[score_column], x[label_column])
-                    # if len(x) >= 10
-                    # else np.nan
-                )
-            )
-            .reset_index(name="gini_value")
-        )
-        weekly_gini["period"] = "Week"
-        weekly_gini["start_date"] = weekly_gini["week"].apply(
-            lambda x: x.to_timestamp()
-        )
-        weekly_gini["end_date"] = weekly_gini["start_date"] + timedelta(days=6)
+#     # Process each dataset
+#     for dataset_name, dataset_df, metadata in datasets_to_process:
+#         # Calculate weekly Gini
+#         dataset_df_copy = dataset_df.copy()
+#         dataset_df_copy["week"] = dataset_df_copy["disbursementdate"].dt.to_period("W")
+#         weekly_gini = (
+#             dataset_df_copy.groupby("week")
+#             .apply(
+#                 lambda x: (
+#                     calculate_gini(x[score_column], x[label_column])
+#                     # if len(x) >= 10
+#                     # else np.nan
+#                 )
+#             )
+#             .reset_index(name="gini_value")
+#         )
+#         weekly_gini["period"] = "Week"
+#         weekly_gini["start_date"] = weekly_gini["week"].apply(
+#             lambda x: x.to_timestamp()
+#         )
+#         weekly_gini["end_date"] = weekly_gini["start_date"] + timedelta(days=6)
 
-        # Add distinct account count for weekly
-        if account_id_column:
-            weekly_account_counts = (
-                dataset_df_copy.groupby("week")[account_id_column]
-                .nunique()
-                .reset_index()
-            )
-            weekly_account_counts.columns = ["week", "distinct_accounts"]
-            weekly_gini = weekly_gini.merge(
-                weekly_account_counts, on="week", how="left"
-            )
-        else:
-            weekly_gini["distinct_accounts"] = None
+#         # Add distinct account count for weekly
+#         if account_id_column:
+#             weekly_account_counts = (
+#                 dataset_df_copy.groupby("week")[account_id_column]
+#                 .nunique()
+#                 .reset_index()
+#             )
+#             weekly_account_counts.columns = ["week", "distinct_accounts"]
+#             weekly_gini = weekly_gini.merge(
+#                 weekly_account_counts, on="week", how="left"
+#             )
+#         else:
+#             weekly_gini["distinct_accounts"] = None
 
-        # Add bad count for weekly (distinct accounts where label == 1)
-        if account_id_column:
-            weekly_bad_counts = (
-                dataset_df_copy[dataset_df_copy[label_column] == 1]
-                .groupby("week")[account_id_column]
-                .nunique()
-                .reset_index()
-            )
-            weekly_bad_counts.columns = ["week", "bad_count"]
-            weekly_gini = weekly_gini.merge(
-                weekly_bad_counts, on="week", how="left"
-            )
-            weekly_gini["bad_count"] = weekly_gini["bad_count"].fillna(0).astype(int)
-        else:
-            weekly_gini["bad_count"] = None
+#         # Add bad count for weekly (distinct accounts where label == 1)
+#         if account_id_column:
+#             weekly_bad_counts = (
+#                 dataset_df_copy[dataset_df_copy[label_column] == 1]
+#                 .groupby("week")[account_id_column]
+#                 .nunique()
+#                 .reset_index()
+#             )
+#             weekly_bad_counts.columns = ["week", "bad_count"]
+#             weekly_gini = weekly_gini.merge(
+#                 weekly_bad_counts, on="week", how="left"
+#             )
+#             weekly_gini["bad_count"] = weekly_gini["bad_count"].fillna(0).astype(int)
+#         else:
+#             weekly_gini["bad_count"] = None
 
-        weekly_gini = weekly_gini[
-            ["start_date", "end_date", "gini_value", "period", "distinct_accounts", "bad_count"]
-        ]
+#         weekly_gini = weekly_gini[
+#             ["start_date", "end_date", "gini_value", "period", "distinct_accounts", "bad_count"]
+#         ]
 
-        # Calculate monthly Gini
-        dataset_df_copy = dataset_df.copy()
-        dataset_df_copy["month"] = dataset_df_copy["disbursementdate"].dt.to_period("M")
-        monthly_gini = (
-            dataset_df_copy.groupby("month")
-            .apply(
-                lambda x: (
-                    calculate_gini(x[score_column], x[label_column])
-                    # if len(x) >= 20
-                    # else np.nan
-                )
-            )
-            .reset_index(name="gini_value")
-        )
-        monthly_gini["period"] = "Month"
-        monthly_gini["start_date"] = monthly_gini["month"].apply(
-            lambda x: x.to_timestamp()
-        )
-        monthly_gini["end_date"] = (
-            monthly_gini["start_date"] + pd.DateOffset(months=1) - pd.Timedelta(days=1)
-        )
+#         # Calculate monthly Gini
+#         dataset_df_copy = dataset_df.copy()
+#         dataset_df_copy["month"] = dataset_df_copy["disbursementdate"].dt.to_period("M")
+#         monthly_gini = (
+#             dataset_df_copy.groupby("month")
+#             .apply(
+#                 lambda x: (
+#                     calculate_gini(x[score_column], x[label_column])
+#                     # if len(x) >= 20
+#                     # else np.nan
+#                 )
+#             )
+#             .reset_index(name="gini_value")
+#         )
+#         monthly_gini["period"] = "Month"
+#         monthly_gini["start_date"] = monthly_gini["month"].apply(
+#             lambda x: x.to_timestamp()
+#         )
+#         monthly_gini["end_date"] = (
+#             monthly_gini["start_date"] + pd.DateOffset(months=1) - pd.Timedelta(days=1)
+#         )
 
-        # Add distinct account count for monthly
-        if account_id_column:
-            monthly_account_counts = (
-                dataset_df_copy.groupby("month")[account_id_column]
-                .nunique()
-                .reset_index()
-            )
-            monthly_account_counts.columns = ["month", "distinct_accounts"]
-            monthly_gini = monthly_gini.merge(
-                monthly_account_counts, on="month", how="left"
-            )
-        else:
-            monthly_gini["distinct_accounts"] = None
+#         # Add distinct account count for monthly
+#         if account_id_column:
+#             monthly_account_counts = (
+#                 dataset_df_copy.groupby("month")[account_id_column]
+#                 .nunique()
+#                 .reset_index()
+#             )
+#             monthly_account_counts.columns = ["month", "distinct_accounts"]
+#             monthly_gini = monthly_gini.merge(
+#                 monthly_account_counts, on="month", how="left"
+#             )
+#         else:
+#             monthly_gini["distinct_accounts"] = None
 
-        # Add bad count for monthly (distinct accounts where label == 1)
-        if account_id_column:
-            monthly_bad_counts = (
-                dataset_df_copy[dataset_df_copy[label_column] == 1]
-                .groupby("month")[account_id_column]
-                .nunique()
-                .reset_index()
-            )
-            monthly_bad_counts.columns = ["month", "bad_count"]
-            monthly_gini = monthly_gini.merge(
-                monthly_bad_counts, on="month", how="left"
-            )
-            monthly_gini["bad_count"] = monthly_gini["bad_count"].fillna(0).astype(int)
-        else:
-            monthly_gini["bad_count"] = None
+#         # Add bad count for monthly (distinct accounts where label == 1)
+#         if account_id_column:
+#             monthly_bad_counts = (
+#                 dataset_df_copy[dataset_df_copy[label_column] == 1]
+#                 .groupby("month")[account_id_column]
+#                 .nunique()
+#                 .reset_index()
+#             )
+#             monthly_bad_counts.columns = ["month", "bad_count"]
+#             monthly_gini = monthly_gini.merge(
+#                 monthly_bad_counts, on="month", how="left"
+#             )
+#             monthly_gini["bad_count"] = monthly_gini["bad_count"].fillna(0).astype(int)
+#         else:
+#             monthly_gini["bad_count"] = None
 
-        monthly_gini = monthly_gini[
-            ["start_date", "end_date", "gini_value", "period", "distinct_accounts", "bad_count"]
-        ]
+#         monthly_gini = monthly_gini[
+#             ["start_date", "end_date", "gini_value", "period", "distinct_accounts", "bad_count"]
+#         ]
 
-        # Combine results for this dataset
-        gini_results = pd.concat([weekly_gini, monthly_gini], ignore_index=True)
-        gini_results = gini_results.sort_values(by="start_date").reset_index(drop=True)
+#         # Combine results for this dataset
+#         gini_results = pd.concat([weekly_gini, monthly_gini], ignore_index=True)
+#         gini_results = gini_results.sort_values(by="start_date").reset_index(drop=True)
 
-        # Add metadata columns
-        gini_results["Model_Name"] = score_column
-        gini_results["bad_rate"] = namecolumn
-        gini_results["segment_type"] = dataset_name
+#         # Add metadata columns
+#         gini_results["Model_Name"] = score_column
+#         gini_results["bad_rate"] = namecolumn
+#         gini_results["segment_type"] = dataset_name
 
-        # Add individual segment components
-        gini_results["data_selection"] = (
-            metadata.get(data_selection_column, None) if data_selection_column else None
-        )
-        gini_results["model_version"] = (
-            metadata.get(model_version_column, None) if model_version_column else None
-        )
-        gini_results["trench_category"] = (
-            metadata.get(trench_column, None) if trench_column else None
-        )
-        gini_results["loan_type"] = (
-            metadata.get(loan_type_column, None) if loan_type_column else None
-        )
-        gini_results["loan_product_type"] = (
-            metadata.get(loan_product_type_column, None)
-            if loan_product_type_column
-            else None
-        )
-        gini_results["ostype"] = (
-            metadata.get(ostype_column, None) if ostype_column else None
-        )
-        gini_results["apptype"] = (metadata.get(apptype_column, None) if apptype_column else None
-        )
-        gini_results["risk_segment"] = metadata.get(risk_segment_column, None) if risk_segment_column else None
-        gini_results["risk_segment_final"] = metadata.get(risk_segment_final_column, None) if risk_segment_final_column else None   
+#         # Add individual segment components
+#         gini_results["data_selection"] = (
+#             metadata.get(data_selection_column, None) if data_selection_column else None
+#         )
+#         gini_results["model_version"] = (
+#             metadata.get(model_version_column, None) if model_version_column else None
+#         )
+#         gini_results["trench_category"] = (
+#             metadata.get(trench_column, None) if trench_column else None
+#         )
+#         gini_results["loan_type"] = (
+#             metadata.get(loan_type_column, None) if loan_type_column else None
+#         )
+#         gini_results["loan_product_type"] = (
+#             metadata.get(loan_product_type_column, None)
+#             if loan_product_type_column
+#             else None
+#         )
+#         gini_results["ostype"] = (
+#             metadata.get(ostype_column, None) if ostype_column else None
+#         )
+#         gini_results["apptype"] = (metadata.get(apptype_column, None) if apptype_column else None
+#         )
+#         gini_results["risk_segment"] = metadata.get(risk_segment_column, None) if risk_segment_column else None
+#         gini_results["risk_segment_final"] = metadata.get(risk_segment_final_column, None) if risk_segment_final_column else None
 
-        all_results.append(gini_results)
+#         all_results.append(gini_results)
 
-    # Combine all results
-    fact_table = pd.concat(all_results, ignore_index=True)
+#     # Combine all results
+#     fact_table = pd.concat(all_results, ignore_index=True)
 
-    # Create dimension table (unique segment combinations for filtering)
-    dimension_table = (
-        fact_table[
-            [
-                "Model_Name",
-                "bad_rate",
-                "segment_type",
-                "data_selection",
-                "model_version",
-                "trench_category",
-                "loan_type",
-                "loan_product_type",
-                "ostype",
-                "apptype",
-                "risk_segment", 
-                "risk_segment_final",
-            ]
-        ]
-        .drop_duplicates()
-        .reset_index(drop=True)
-    )
-    dimension_table["segment_id"] = range(len(dimension_table))
+#     # Create dimension table (unique segment combinations for filtering)
+#     dimension_table = (
+#         fact_table[
+#             [
+#                 "Model_Name",
+#                 "bad_rate",
+#                 "segment_type",
+#                 "data_selection",
+#                 "model_version",
+#                 "trench_category",
+#                 "loan_type",
+#                 "loan_product_type",
+#                 "ostype",
+#                 "apptype",
+#                 "risk_segment",
+#                 "risk_segment_final",
+#             ]
+#         ]
+#         .drop_duplicates()
+#         .reset_index(drop=True)
+#     )
+#     dimension_table["segment_id"] = range(len(dimension_table))
 
-    # Add segment_id to fact table
-    fact_table = fact_table.merge(
-        dimension_table[
-            [
-                "segment_id",
-                "Model_Name",
-                "bad_rate",
-                "segment_type",
-                "data_selection",
-                "model_version",
-                "trench_category",
-                "loan_type",
-                "loan_product_type",
-                "ostype",
-                "apptype",
-                "risk_segment", 
-                "risk_segment_final",
-            ]
-        ],
-        on=[
-            "Model_Name",
-            "bad_rate",
-            "segment_type",
-            "data_selection",
-            "model_version",
-            "trench_category",
-            "loan_type",
-            "loan_product_type",
-            "ostype",
-            "apptype",
-            "risk_segment", 
-            "risk_segment_final",
-        ],
-        how="left",
-    )
+#     # Add segment_id to fact table
+#     fact_table = fact_table.merge(
+#         dimension_table[
+#             [
+#                 "segment_id",
+#                 "Model_Name",
+#                 "bad_rate",
+#                 "segment_type",
+#                 "data_selection",
+#                 "model_version",
+#                 "trench_category",
+#                 "loan_type",
+#                 "loan_product_type",
+#                 "ostype",
+#                 "apptype",
+#                 "risk_segment",
+#                 "risk_segment_final",
+#             ]
+#         ],
+#         on=[
+#             "Model_Name",
+#             "bad_rate",
+#             "segment_type",
+#             "data_selection",
+#             "model_version",
+#             "trench_category",
+#             "loan_type",
+#             "loan_product_type",
+#             "ostype",
+#             "apptype",
+#             "risk_segment",
+#             "risk_segment_final",
+#         ],
+#         how="left",
+#     )
 
-    # Reorder columns in fact table
-    fact_table = fact_table[
-        [
-            "segment_id",
-            "start_date",
-            "end_date",
-            "period",
-            "gini_value",
-            "distinct_accounts",
-            "bad_count",
-            "Model_Name",
-            "bad_rate",
-            "segment_type",
-            "data_selection",
-            "model_version",
-            "trench_category",
-            "loan_type",
-            "loan_product_type",
-            "ostype",
-            "apptype",
-            "risk_segment", 
-            "risk_segment_final"
-        ]
-    ]
+#     # Reorder columns in fact table
+#     fact_table = fact_table[
+#         [
+#             "segment_id",
+#             "start_date",
+#             "end_date",
+#             "period",
+#             "gini_value",
+#             "distinct_accounts",
+#             "bad_count",
+#             "Model_Name",
+#             "bad_rate",
+#             "segment_type",
+#             "data_selection",
+#             "model_version",
+#             "trench_category",
+#             "loan_type",
+#             "loan_product_type",
+#             "ostype",
+#             "apptype",
+#             "risk_segment",
+#             "risk_segment_final"
+#         ]
+#     ]
 
-    # Reorder columns in dimension table
-    dimension_table = dimension_table[
-        [
-            "segment_id",
-            "Model_Name",
-            "bad_rate",
-            "segment_type",
-            "data_selection",
-            "model_version",
-            "trench_category",
-            "loan_type",
-            "loan_product_type",
-            "ostype",
-            "apptype",
-            "risk_segment", 
-            "risk_segment_final"
-        ]
-    ]
+#     # Reorder columns in dimension table
+#     dimension_table = dimension_table[
+#         [
+#             "segment_id",
+#             "Model_Name",
+#             "bad_rate",
+#             "segment_type",
+#             "data_selection",
+#             "model_version",
+#             "trench_category",
+#             "loan_type",
+#             "loan_product_type",
+#             "ostype",
+#             "apptype",
+#             "risk_segment",
+#             "risk_segment_final"
+#         ]
+#     ]
 
-    return fact_table, dimension_table
+#     return fact_table, dimension_table
 
 # %% [markdown]
 # ### update_tables
 
 # %%
-def update_tables(
-    fact_table: pd.DataFrame,
-    dimension_table: pd.DataFrame,
-    model_name: str,
-    product: str,
-) -> tuple:
-    """
-    Updates fact_table and dimension_table:
-    - Sets 'Model_display_name' to the given model_name
-    - Replaces NaN values in specified columns with 'Overall'
+# def update_tables(
+#     fact_table: pd.DataFrame,
+#     dimension_table: pd.DataFrame,
+#     model_name: str,
+#     product: str,
+# ) -> tuple:
+#     """
+#     Updates fact_table and dimension_table:
+#     - Sets 'Model_display_name' to the given model_name
+#     - Replaces NaN values in specified columns with 'Overall'
 
-    Returns:
-        Updated fact_table and dimension_table as a tuple
-    """
-    # Columns where missing values should be replaced
-    cols_to_replace = [
-        "model_version",
-        "trench_category",
-        "loan_type",
-        "loan_product_type",
-        "ostype",
-        "apptype",
-        "risk_segment", 
-        "risk_segment_final",
-    ]
+#     Returns:
+#         Updated fact_table and dimension_table as a tuple
+#     """
+#     # Columns where missing values should be replaced
+#     cols_to_replace = [
+#         "model_version",
+#         "trench_category",
+#         "loan_type",
+#         "loan_product_type",
+#         "ostype",
+#         "apptype",
+#         "risk_segment",
+#         "risk_segment_final",
+#     ]
 
-    # Update fact_table
-    fact_table["Model_display_name"] = model_name
-    fact_table["Product_Category"] = product
-    fact_table[cols_to_replace] = fact_table[cols_to_replace].fillna("Overall")
+#     # Update fact_table
+#     fact_table["Model_display_name"] = model_name
+#     fact_table["Product_Category"] = product
+#     fact_table[cols_to_replace] = fact_table[cols_to_replace].fillna("Overall")
 
-    # Update dimension_table
-    dimension_table["Model_display_name"] = model_name
-    dimension_table["Product_Category"] = product
-    dimension_table[cols_to_replace] = dimension_table[cols_to_replace].fillna(
-        "Overall"
-    )
+#     # Update dimension_table
+#     dimension_table["Model_display_name"] = model_name
+#     dimension_table["Product_Category"] = product
+#     dimension_table[cols_to_replace] = dimension_table[cols_to_replace].fillna(
+#         "Overall"
+#     )
 
-    return fact_table, dimension_table
+#     return fact_table, dimension_table
 
 
 # %% [markdown]
@@ -1731,7 +1920,7 @@ def update_tables(
 #   p.prediction aStackScore,
 #   case when p.modelDisplayName like 'Alpha%' then 'alpha_stack_model_cash' else p.modelDisplayName end as modelDisplayName,
 #   p.modelVersionId,
-#   -- coalesce (p.trenchCategory, REGEXP_EXTRACT(m.requestPayload_clean, r"trenchCategory[:=]['\"]?([^'\"]+)['\"]?")) 
+#   -- coalesce (p.trenchCategory, REGEXP_EXTRACT(m.requestPayload_clean, r"trenchCategory[:=]['\"]?([^'\"]+)['\"]?"))
 #   p.trenchCategory,
 #        osType,
 #   from parsed p
@@ -1961,7 +2150,7 @@ def update_tables(
 #   p.prediction aStackScore,
 #   case when p.modelDisplayName like 'Alpha%' then 'alpha_stack_model_cash' else p.modelDisplayName end as modelDisplayName,
 #   p.modelVersionId,
-#   -- coalesce (p.trenchCategory, REGEXP_EXTRACT(m.requestPayload_clean, r"trenchCategory[:=]['\"]?([^'\"]+)['\"]?")) 
+#   -- coalesce (p.trenchCategory, REGEXP_EXTRACT(m.requestPayload_clean, r"trenchCategory[:=]['\"]?([^'\"]+)['\"]?"))
 #   p.trenchCategory,
 #        osType,
 #   from parsed p
@@ -2421,7 +2610,7 @@ def update_tables(
 #   p.prediction aStackScore,
 #   case when p.modelDisplayName like 'Alpha%' then 'alpha_stack_model_cash' else p.modelDisplayName end as modelDisplayName,
 #   p.modelVersionId,
-#   -- coalesce (p.trenchCategory, REGEXP_EXTRACT(m.requestPayload_clean, r"trenchCategory[:=]['\"]?([^'\"]+)['\"]?")) 
+#   -- coalesce (p.trenchCategory, REGEXP_EXTRACT(m.requestPayload_clean, r"trenchCategory[:=]['\"]?([^'\"]+)['\"]?"))
 #   p.trenchCategory,
 #        osType,
 #   from parsed p
@@ -2624,7 +2813,6 @@ def update_tables(
 # # %%
 
 
-
 # # ### FSTPD30
 
 
@@ -2652,7 +2840,7 @@ def update_tables(
 #   p.prediction aStackScore,
 #   case when p.modelDisplayName like 'Alpha%' then 'alpha_stack_model_cash' else p.modelDisplayName end as modelDisplayName,
 #   p.modelVersionId,
-#   -- coalesce (p.trenchCategory, REGEXP_EXTRACT(m.requestPayload_clean, r"trenchCategory[:=]['\"]?([^'\"]+)['\"]?")) 
+#   -- coalesce (p.trenchCategory, REGEXP_EXTRACT(m.requestPayload_clean, r"trenchCategory[:=]['\"]?([^'\"]+)['\"]?"))
 #   p.trenchCategory,
 #        osType,
 #   from parsed p
@@ -2863,6 +3051,3 @@ def update_tables(
 # # End
 
 # %%
-
-
-

@@ -1,0 +1,6 @@
+pandas
+google-cloud-bigquery
+google-cloud-storage
+gcsfs
+typing-extensions
+pandas-gbq

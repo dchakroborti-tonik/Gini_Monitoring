@@ -8,20 +8,20 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # List your parallel python files
 # -----------------------------------
 PY_FILES = [
-    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_Alpha_cash_stack_test.py",
-    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_cash_appscore_model.py",
-    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_cash_demo_model.py",
-    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_cash_stack_model_credo_score.py",
-    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_cash_stack_model.py",
-    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_events_model_cash.py",
-    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_cic_model_cash.py",
-    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_cash_stack_model_transaction_score.py",
-    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_alpha_stack_model_sil.py",
-    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_Beta App Score SIL.py",
-    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_beta_stack_model_sil_credo_score.py",
-    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_BetaSILDemoScore.py",
-    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_BetaSILSTACKScoreModel.py",
-    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_cic_model_sil.py",
+    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_Alpha_cash_stack_test.py",
+    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_cash_appscore_model.py",
+    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_cash_demo_model.py",
+    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_cash_stack_model_credo_score.py",
+    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_cash_stack_model.py",
+    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_events_model_cash.py",
+    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_cic_model_cash.py",
+    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_cash_stack_model_transaction_score.py",
+    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_alpha_stack_model_sil.py",
+    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_Beta App Score SIL.py",
+    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_beta_stack_model_sil_credo_score.py",
+    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_BetaSILDemoScore.py",
+    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_BetaSILSTACKScoreModel.py",
+    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_cic_model_sil.py",
 ]
 
 CONSOLIDATED_FILES = [
@@ -35,8 +35,7 @@ CONSOLIDATED_FILES = [
 # -----------------------------------
 status_lock = threading.Lock()
 job_status = {
-    file: {"state": "QUEUED", "start": None}
-    for file in PY_FILES + CONSOLIDATED_FILES
+    file: {"state": "QUEUED", "start": None} for file in PY_FILES + CONSOLIDATED_FILES
 }
 
 
@@ -61,8 +60,14 @@ def status_monitor(stop_event, interval=30):
 def build_command(file_name):
     if file_name.lower().endswith(".ipynb"):
         return [
-            sys.executable, "-m", "jupyter", "nbconvert",
-            "--to", "notebook", "--execute", "--inplace",
+            sys.executable,
+            "-m",
+            "jupyter",
+            "nbconvert",
+            "--to",
+            "notebook",
+            "--execute",
+            "--inplace",
             file_name,
         ]
     return [sys.executable, file_name]
@@ -75,23 +80,17 @@ def run_python_file(file_name):
 
     print(f"Starting {file_name}")
 
-    result = subprocess.run(
-        build_command(file_name),
-        capture_output=True,
-        text=True
-    )
+    result = subprocess.run(build_command(file_name), capture_output=True, text=True)
 
     if result.returncode != 0:
         with status_lock:
             job_status[file_name]["state"] = "FAILED"
-        raise Exception(
-            f"""
+        raise Exception(f"""
             Failed: {file_name}
 
             Error:
             {result.stderr}
-            """
-        )
+            """)
 
     with status_lock:
         job_status[file_name]["state"] = "DONE"
@@ -109,15 +108,14 @@ def main():
     failed = False
 
     stop_event = threading.Event()
-    monitor_thread = threading.Thread(target=status_monitor, args=(stop_event,), daemon=True)
+    monitor_thread = threading.Thread(
+        target=status_monitor, args=(stop_event,), daemon=True
+    )
     monitor_thread.start()
 
     with ThreadPoolExecutor(max_workers=6) as executor:
 
-        futures = [
-            executor.submit(run_python_file, file)
-            for file in PY_FILES
-        ]
+        futures = [executor.submit(run_python_file, file) for file in PY_FILES]
 
         for future in as_completed(futures):
             try:
@@ -129,7 +127,6 @@ def main():
 
     stop_event.set()
     print_status_table()
-
 
     # -----------------------------------
     # Run consolidated files in parallel, only if all individual jobs passed

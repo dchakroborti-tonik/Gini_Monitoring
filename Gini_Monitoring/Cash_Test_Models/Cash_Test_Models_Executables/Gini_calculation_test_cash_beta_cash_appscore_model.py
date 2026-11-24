@@ -4,6 +4,21 @@
 # %% [markdown]
 # ## Define Library
 
+import io
+import os
+import pickle
+import tempfile
+import time
+import uuid
+from datetime import datetime, timedelta
+from typing import Union
+
+import duckdb as dd
+import gcsfs
+import joblib
+import matplotlib.pyplot as plt
+import numpy as np
+
 # %%
 # %% [markdown]
 # # Jupyter Notebook Loading Header
@@ -13,42 +28,28 @@
 # %% [markdown]
 ## Import Libraries
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 import seaborn as sns
-from google.cloud import bigquery
-from google.cloud import storage
-import os
-import tempfile
-import time
-from datetime import datetime
-import uuid
-import joblib
-import uuid
+from google.cloud import bigquery, storage
 from sklearn.metrics import roc_auc_score
-from datetime import datetime, timedelta
-import gcsfs
-import duckdb as dd
-import pickle
-import joblib
-from typing import Union
-import io
-path = r'C:\Users\Dwaipayan\AppData\Roaming\gcloud\application_default_credentials.json'
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = path
-client = bigquery.Client(project='prj-prod-dataplatform')
+
+path = r"C:\Users\Dwaipayan\AppData\Roaming\gcloud\application_default_credentials.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = path
+client = bigquery.Client(project="prj-prod-dataplatform")
 os.environ["GOOGLE_CLOUD_PROJECT"] = "prj-prod-dataplatform"
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 # %% [markdown]
 ## Configure Settings
 # Set options or configurations as needed
-pd.set_option('display.max_columns', None)
+pd.set_option("display.max_columns", None)
 pd.set_option("Display.max_rows", 100)
 
 # %% [markdown]
 # ## 🏗️Functions
+
 
 # %%
 def calculate_gini(scores, labels):
@@ -82,13 +83,16 @@ def calculate_gini(scores, labels):
     except Exception:
         return np.nan
 
+
 # %% [markdown]
 # ### Gini Optimized
 
+from itertools import combinations
+
+import numpy as np
+
 # %%
 import pandas as pd
-import numpy as np
-from itertools import combinations
 from scipy.stats import rankdata
 
 
@@ -191,7 +195,9 @@ def calculate_periodic_gini_prod_ver_trench_dimfact(
     if loan_type_column:
         segment_defs.append(("LoanType", loan_type_column, "loan_type"))
     if loan_product_type_column:
-        segment_defs.append(("ProductType", loan_product_type_column, "loan_product_type"))
+        segment_defs.append(
+            ("ProductType", loan_product_type_column, "loan_product_type")
+        )
     if ostype_column:
         segment_defs.append(("OSType", ostype_column, "ostype"))
     if apptype_column:
@@ -199,11 +205,20 @@ def calculate_periodic_gini_prod_ver_trench_dimfact(
     if risk_segment_column:
         segment_defs.append(("risk_segment", risk_segment_column, "risk_segment"))
     if risk_segment_final_column:
-        segment_defs.append(("risk_segment_final", risk_segment_final_column, "risk_segment_final"))
+        segment_defs.append(
+            ("risk_segment_final", risk_segment_final_column, "risk_segment_final")
+        )
 
     all_output_fields = [
-        "data_selection", "model_version", "trench_category", "loan_type",
-        "loan_product_type", "ostype", "apptype", "risk_segment", "risk_segment_final",
+        "data_selection",
+        "model_version",
+        "trench_category",
+        "loan_type",
+        "loan_product_type",
+        "ostype",
+        "apptype",
+        "risk_segment",
+        "risk_segment_final",
     ]
 
     scores_arr = df[score_column].to_numpy()
@@ -217,7 +232,12 @@ def calculate_periodic_gini_prod_ver_trench_dimfact(
 
     period_specs = [
         ("week", "Week", lambda ts: ts, lambda ts: ts + pd.Timedelta(days=6)),
-        ("month", "Month", lambda ts: ts, lambda ts: ts + pd.DateOffset(months=1) - pd.Timedelta(days=1)),
+        (
+            "month",
+            "Month",
+            lambda ts: ts,
+            lambda ts: ts + pd.DateOffset(months=1) - pd.Timedelta(days=1),
+        ),
     ]
 
     rows = []
@@ -244,7 +264,9 @@ def calculate_periodic_gini_prod_ver_trench_dimfact(
                     distinct_accounts = pd.unique(seg_accounts).shape[0]
                     bad_mask = seg_labels == 1
                     bad_count = (
-                        pd.unique(seg_accounts[bad_mask]).shape[0] if bad_mask.any() else 0
+                        pd.unique(seg_accounts[bad_mask]).shape[0]
+                        if bad_mask.any()
+                        else 0
                     )
                 else:
                     distinct_accounts = None
@@ -256,7 +278,9 @@ def calculate_periodic_gini_prod_ver_trench_dimfact(
                 seg_name = (
                     "Overall"
                     if not combo
-                    else "_".join(f"{disp}_{val}" for (disp, _, _), val in zip(combo, seg_values))
+                    else "_".join(
+                        f"{disp}_{val}" for (disp, _, _), val in zip(combo, seg_values)
+                    )
                 )
 
                 row = {
@@ -278,7 +302,9 @@ def calculate_periodic_gini_prod_ver_trench_dimfact(
                 rows.append(row)
 
     fact_table = pd.DataFrame(rows)
-    fact_table = fact_table.sort_values(["segment_type", "start_date"]).reset_index(drop=True)
+    fact_table = fact_table.sort_values(["segment_type", "start_date"]).reset_index(
+        drop=True
+    )
 
     dimension_table = (
         fact_table[["Model_Name", "bad_rate", "segment_type"] + all_output_fields]
@@ -288,14 +314,27 @@ def calculate_periodic_gini_prod_ver_trench_dimfact(
     dimension_table["segment_id"] = range(len(dimension_table))
 
     fact_table = fact_table.merge(
-        dimension_table[["segment_id", "Model_Name", "bad_rate", "segment_type"] + all_output_fields],
+        dimension_table[
+            ["segment_id", "Model_Name", "bad_rate", "segment_type"] + all_output_fields
+        ],
         on=["Model_Name", "bad_rate", "segment_type"] + all_output_fields,
         how="left",
     )
 
     fact_table = fact_table[
-        ["segment_id", "start_date", "end_date", "period", "gini_value", "distinct_accounts",
-         "bad_count", "Model_Name", "bad_rate", "segment_type"] + all_output_fields
+        [
+            "segment_id",
+            "start_date",
+            "end_date",
+            "period",
+            "gini_value",
+            "distinct_accounts",
+            "bad_count",
+            "Model_Name",
+            "bad_rate",
+            "segment_type",
+        ]
+        + all_output_fields
     ]
     dimension_table = dimension_table[
         ["segment_id", "Model_Name", "bad_rate", "segment_type"] + all_output_fields
@@ -303,14 +342,17 @@ def calculate_periodic_gini_prod_ver_trench_dimfact(
 
     return fact_table, dimension_table
 
+
 # %% [markdown]
 # ### Calculate Periodic Gini Duckdb
 
+from itertools import combinations
+
+import duckdb
+import numpy as np
+
 # %%
 import pandas as pd
-import numpy as np
-from itertools import combinations
-import duckdb
 
 
 def calculate_periodic_gini_duckdb(
@@ -369,7 +411,9 @@ def calculate_periodic_gini_duckdb(
     if loan_type_column:
         segment_defs.append(("LoanType", loan_type_column, "loan_type"))
     if loan_product_type_column:
-        segment_defs.append(("ProductType", loan_product_type_column, "loan_product_type"))
+        segment_defs.append(
+            ("ProductType", loan_product_type_column, "loan_product_type")
+        )
     if ostype_column:
         segment_defs.append(("OSType", ostype_column, "ostype"))
     if apptype_column:
@@ -377,11 +421,20 @@ def calculate_periodic_gini_duckdb(
     if risk_segment_column:
         segment_defs.append(("risk_segment", risk_segment_column, "risk_segment"))
     if risk_segment_final_column:
-        segment_defs.append(("risk_segment_final", risk_segment_final_column, "risk_segment_final"))
+        segment_defs.append(
+            ("risk_segment_final", risk_segment_final_column, "risk_segment_final")
+        )
 
     all_output_fields = [
-        "data_selection", "model_version", "trench_category", "loan_type",
-        "loan_product_type", "ostype", "apptype", "risk_segment", "risk_segment_final",
+        "data_selection",
+        "model_version",
+        "trench_category",
+        "loan_type",
+        "loan_product_type",
+        "ostype",
+        "apptype",
+        "risk_segment",
+        "risk_segment_final",
     ]
 
     con = con or duckdb.connect()
@@ -393,7 +446,12 @@ def calculate_periodic_gini_duckdb(
 
     period_specs = [
         ("week", "Week", lambda ts: ts, lambda ts: ts + pd.Timedelta(days=6)),
-        ("month", "Month", lambda ts: ts, lambda ts: ts + pd.DateOffset(months=1) - pd.Timedelta(days=1)),
+        (
+            "month",
+            "Month",
+            lambda ts: ts,
+            lambda ts: ts + pd.DateOffset(months=1) - pd.Timedelta(days=1),
+        ),
     ]
 
     all_rows = []
@@ -407,7 +465,8 @@ def calculate_periodic_gini_duckdb(
             acct_agg = (
                 f', COUNT(DISTINCT "{account_id_column}") AS distinct_accounts'
                 f', COUNT(DISTINCT "{account_id_column}") FILTER (WHERE lbl = 1) AS bad_count'
-                if account_id_column else ", NULL AS distinct_accounts, NULL AS bad_count"
+                if account_id_column
+                else ", NULL AS distinct_accounts, NULL AS bad_count"
             )
 
             query = f"""
@@ -443,17 +502,28 @@ def calculate_periodic_gini_duckdb(
 
             for _, r_ in res.iterrows():
                 seg_values = tuple(r_[c] for c in combo_cols)
-                period_value = pd.Period(r_[period_col], freq="W" if period_col == "week" else "M")
+                period_value = pd.Period(
+                    r_[period_col], freq="W" if period_col == "week" else "M"
+                )
                 start_date = start_fn(period_value.to_timestamp())
                 end_date = end_fn(period_value.to_timestamp())
-                seg_name = "Overall" if not combo else "_".join(
-                    f"{disp}_{val}" for (disp, _, _), val in zip(combo, seg_values)
+                seg_name = (
+                    "Overall"
+                    if not combo
+                    else "_".join(
+                        f"{disp}_{val}" for (disp, _, _), val in zip(combo, seg_values)
+                    )
                 )
                 row = {
-                    "start_date": start_date, "end_date": end_date, "period": period_label,
-                    "gini_value": r_["gini_value"], "distinct_accounts": r_["distinct_accounts"],
-                    "bad_count": r_["bad_count"], "Model_Name": score_column,
-                    "bad_rate": namecolumn, "segment_type": seg_name,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "period": period_label,
+                    "gini_value": r_["gini_value"],
+                    "distinct_accounts": r_["distinct_accounts"],
+                    "bad_count": r_["bad_count"],
+                    "Model_Name": score_column,
+                    "bad_rate": namecolumn,
+                    "segment_type": seg_name,
                 }
                 for field in all_output_fields:
                     row[field] = None
@@ -461,33 +531,57 @@ def calculate_periodic_gini_duckdb(
                     row[field] = val
                 all_rows.append(row)
 
-    fact_table = pd.DataFrame(all_rows).sort_values(["segment_type", "start_date"]).reset_index(drop=True)
+    fact_table = (
+        pd.DataFrame(all_rows)
+        .sort_values(["segment_type", "start_date"])
+        .reset_index(drop=True)
+    )
     dimension_table = (
         fact_table[["Model_Name", "bad_rate", "segment_type"] + all_output_fields]
-        .drop_duplicates().reset_index(drop=True)
+        .drop_duplicates()
+        .reset_index(drop=True)
     )
     dimension_table["segment_id"] = range(len(dimension_table))
     fact_table = fact_table.merge(
-        dimension_table[["segment_id", "Model_Name", "bad_rate", "segment_type"] + all_output_fields],
-        on=["Model_Name", "bad_rate", "segment_type"] + all_output_fields, how="left",
+        dimension_table[
+            ["segment_id", "Model_Name", "bad_rate", "segment_type"] + all_output_fields
+        ],
+        on=["Model_Name", "bad_rate", "segment_type"] + all_output_fields,
+        how="left",
     )
     fact_table = fact_table[
-        ["segment_id", "start_date", "end_date", "period", "gini_value", "distinct_accounts",
-         "bad_count", "Model_Name", "bad_rate", "segment_type"] + all_output_fields
+        [
+            "segment_id",
+            "start_date",
+            "end_date",
+            "period",
+            "gini_value",
+            "distinct_accounts",
+            "bad_count",
+            "Model_Name",
+            "bad_rate",
+            "segment_type",
+        ]
+        + all_output_fields
     ]
-    dimension_table = dimension_table[["segment_id", "Model_Name", "bad_rate", "segment_type"] + all_output_fields]
+    dimension_table = dimension_table[
+        ["segment_id", "Model_Name", "bad_rate", "segment_type"] + all_output_fields
+    ]
     return fact_table, dimension_table
+
 
 # %% [markdown]
 # ### Calculate Gini Multiprocessing
 
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor
+from itertools import combinations
+
+import numpy as np
+
 # %%
 import pandas as pd
-import numpy as np
-from itertools import combinations
 from scipy.stats import rankdata
-from concurrent.futures import ProcessPoolExecutor
-import multiprocessing as mp
 
 # ---- shared, read-only, per-worker state -----------------------------------
 # Populated in the PARENT process before the pool is created. On Linux
@@ -560,7 +654,9 @@ def _process_task(task):
             seg_accounts = accounts_arr[idx]
             distinct_accounts = pd.unique(seg_accounts).shape[0]
             bad_mask = seg_labels == 1
-            bad_count = pd.unique(seg_accounts[bad_mask]).shape[0] if bad_mask.any() else 0
+            bad_count = (
+                pd.unique(seg_accounts[bad_mask]).shape[0] if bad_mask.any() else 0
+            )
         else:
             distinct_accounts, bad_count = None, None
 
@@ -568,15 +664,25 @@ def _process_task(task):
         if period_col == "week":
             start_date, end_date = ts, ts + pd.Timedelta(days=6)
         else:
-            start_date, end_date = ts, ts + pd.DateOffset(months=1) - pd.Timedelta(days=1)
+            start_date, end_date = ts, ts + pd.DateOffset(months=1) - pd.Timedelta(
+                days=1
+            )
 
-        seg_name = "Overall" if not combo else "_".join(
-            f"{disp}_{val}" for (disp, _, _), val in zip(combo, seg_values)
+        seg_name = (
+            "Overall"
+            if not combo
+            else "_".join(
+                f"{disp}_{val}" for (disp, _, _), val in zip(combo, seg_values)
+            )
         )
         row = {
-            "start_date": start_date, "end_date": end_date, "period": period_label,
-            "gini_value": gini_value, "distinct_accounts": distinct_accounts,
-            "bad_count": bad_count, "segment_type": seg_name,
+            "start_date": start_date,
+            "end_date": end_date,
+            "period": period_label,
+            "gini_value": gini_value,
+            "distinct_accounts": distinct_accounts,
+            "bad_count": bad_count,
+            "segment_type": seg_name,
         }
         for (_, _, field), val in zip(combo, seg_values):
             row[field] = val
@@ -585,11 +691,21 @@ def _process_task(task):
 
 
 def calculate_periodic_gini_multiproc(
-    df, score_column, label_column, namecolumn,
-    data_selection_column=None, model_version_column=None, trench_column=None,
-    loan_type_column=None, loan_product_type_column=None, ostype_column=None,
-    apptype_column=None, risk_segment_column=None, risk_segment_final_column=None,
-    account_id_column=None, n_workers=None,
+    df,
+    score_column,
+    label_column,
+    namecolumn,
+    data_selection_column=None,
+    model_version_column=None,
+    trench_column=None,
+    loan_type_column=None,
+    loan_product_type_column=None,
+    ostype_column=None,
+    apptype_column=None,
+    risk_segment_column=None,
+    risk_segment_final_column=None,
+    account_id_column=None,
+    n_workers=None,
 ):
     """Same contract as the single-process optimized version. Parallelizes
     across (segment-combo, period) tasks with ProcessPoolExecutor. Best fit
@@ -606,19 +722,39 @@ def calculate_periodic_gini_multiproc(
     df["month"] = df["disbursementdate"].dt.to_period("M")
 
     segment_defs = []
-    if data_selection_column: segment_defs.append(("DataSelection", data_selection_column, "data_selection"))
-    if model_version_column: segment_defs.append(("ModelVersion", model_version_column, "model_version"))
-    if trench_column: segment_defs.append(("Trench", trench_column, "trench_category"))
-    if loan_type_column: segment_defs.append(("LoanType", loan_type_column, "loan_type"))
-    if loan_product_type_column: segment_defs.append(("ProductType", loan_product_type_column, "loan_product_type"))
-    if ostype_column: segment_defs.append(("OSType", ostype_column, "ostype"))
-    if apptype_column: segment_defs.append(("apptype", apptype_column, "apptype"))
-    if risk_segment_column: segment_defs.append(("risk_segment", risk_segment_column, "risk_segment"))
-    if risk_segment_final_column: segment_defs.append(("risk_segment_final", risk_segment_final_column, "risk_segment_final"))
+    if data_selection_column:
+        segment_defs.append(("DataSelection", data_selection_column, "data_selection"))
+    if model_version_column:
+        segment_defs.append(("ModelVersion", model_version_column, "model_version"))
+    if trench_column:
+        segment_defs.append(("Trench", trench_column, "trench_category"))
+    if loan_type_column:
+        segment_defs.append(("LoanType", loan_type_column, "loan_type"))
+    if loan_product_type_column:
+        segment_defs.append(
+            ("ProductType", loan_product_type_column, "loan_product_type")
+        )
+    if ostype_column:
+        segment_defs.append(("OSType", ostype_column, "ostype"))
+    if apptype_column:
+        segment_defs.append(("apptype", apptype_column, "apptype"))
+    if risk_segment_column:
+        segment_defs.append(("risk_segment", risk_segment_column, "risk_segment"))
+    if risk_segment_final_column:
+        segment_defs.append(
+            ("risk_segment_final", risk_segment_final_column, "risk_segment_final")
+        )
 
     all_output_fields = [
-        "data_selection", "model_version", "trench_category", "loan_type",
-        "loan_product_type", "ostype", "apptype", "risk_segment", "risk_segment_final",
+        "data_selection",
+        "model_version",
+        "trench_category",
+        "loan_type",
+        "loan_product_type",
+        "ostype",
+        "apptype",
+        "risk_segment",
+        "risk_segment_final",
     ]
 
     combos = [()]
@@ -633,8 +769,10 @@ def calculate_periodic_gini_multiproc(
     ctx = mp.get_context("fork")  # required for the zero-copy _SHARED trick; Linux only
     all_rows = []
     with ProcessPoolExecutor(
-        max_workers=n_workers, mp_context=ctx,
-        initializer=_init_shared, initargs=(df, score_column, label_column, account_id_column),
+        max_workers=n_workers,
+        mp_context=ctx,
+        initializer=_init_shared,
+        initargs=(df, score_column, label_column, account_id_column),
     ) as pool:
         for rows in pool.map(_process_task, tasks):
             all_rows.extend(rows)
@@ -645,25 +783,48 @@ def calculate_periodic_gini_multiproc(
         for field in all_output_fields:
             row.setdefault(field, None)
 
-    fact_table = pd.DataFrame(all_rows).sort_values(["segment_type", "start_date"]).reset_index(drop=True)
+    fact_table = (
+        pd.DataFrame(all_rows)
+        .sort_values(["segment_type", "start_date"])
+        .reset_index(drop=True)
+    )
     dimension_table = (
         fact_table[["Model_Name", "bad_rate", "segment_type"] + all_output_fields]
-        .drop_duplicates().reset_index(drop=True)
+        .drop_duplicates()
+        .reset_index(drop=True)
     )
     dimension_table["segment_id"] = range(len(dimension_table))
     fact_table = fact_table.merge(
-        dimension_table[["segment_id", "Model_Name", "bad_rate", "segment_type"] + all_output_fields],
-        on=["Model_Name", "bad_rate", "segment_type"] + all_output_fields, how="left",
+        dimension_table[
+            ["segment_id", "Model_Name", "bad_rate", "segment_type"] + all_output_fields
+        ],
+        on=["Model_Name", "bad_rate", "segment_type"] + all_output_fields,
+        how="left",
     )
     fact_table = fact_table[
-        ["segment_id", "start_date", "end_date", "period", "gini_value", "distinct_accounts",
-         "bad_count", "Model_Name", "bad_rate", "segment_type"] + all_output_fields
+        [
+            "segment_id",
+            "start_date",
+            "end_date",
+            "period",
+            "gini_value",
+            "distinct_accounts",
+            "bad_count",
+            "Model_Name",
+            "bad_rate",
+            "segment_type",
+        ]
+        + all_output_fields
     ]
-    dimension_table = dimension_table[["segment_id", "Model_Name", "bad_rate", "segment_type"] + all_output_fields]
+    dimension_table = dimension_table[
+        ["segment_id", "Model_Name", "bad_rate", "segment_type"] + all_output_fields
+    ]
     return fact_table, dimension_table
+
 
 # %% [markdown]
 # ### update_tables
+
 
 # %%
 def update_tables(
@@ -688,7 +849,7 @@ def update_tables(
         "loan_product_type",
         "ostype",
         "apptype",
-        "risk_segment", 
+        "risk_segment",
         "risk_segment_final",
     ]
 
@@ -717,8 +878,12 @@ def update_tables(
 
 # %%
 
-facttable_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.fact_appscorecash_test2"
-dimtable_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.dimension_appscorecash_test2"
+facttable_id = (
+    "prj-prod-dataplatform.dap_ds_poweruser_playground.fact_appscorecash_test2"
+)
+dimtable_id = (
+    "prj-prod-dataplatform.dap_ds_poweruser_playground.dimension_appscorecash_test2"
+)
 
 # ## Beta-Cash-AppScore-Model
 
@@ -729,11 +894,22 @@ dimtable_id = "prj-prod-dataplatform.dap_ds_poweruser_playground.dimension_appsc
 
 sq = """
 WITH parsed as (
-select customerId, digitalLoanAccountId,modelDisplayName,modelVersionId,start_time,end_time,prediction,trenchCategory,
-REPLACE(REPLACE(calcFeature, "'", '"'), "None", "null") AS calcFeatures,
-REPLACE(REPLACE(prediction, "'", '"'), "None", "null") AS prediction_clean,  deviceOs osType,
+SELECT
+  customerId,
+  digitalLoanAccountId,
+  modelDisplayName,
+  modelVersionId,
+  start_time,
+  end_time,
+  prediction,
+  trenchCategory,
+  REPLACE(REPLACE(calcFeature, "'", '"'), "None", "null") AS calcFeatures,
+  REPLACE(REPLACE(prediction, "'", '"'), "None", "null") AS prediction_clean,
+  deviceOs osType,
 FROM `prj-prod-dataplatform.audit_balance.ml_model_run_details`
-where modelDisplayName in  ('Beta-Cash-AppScore-Model', 'apps_score_cash')
+WHERE
+  modelDisplayName IN ('Beta-Cash-AppScore-Model', 'apps_score_cash')
+  AND lower(modelVersionId) NOT LIKE '%shadow%'
 ),
 latest_request as (
 select * from parsed
@@ -951,7 +1127,9 @@ df_d_fpd0_appscorecash = dimension_table.copy()
 job_config = bigquery.LoadJobConfig(
     write_disposition="WRITE_TRUNCATE",  # or "WRITE_APPEND"
 )
-job = client.load_table_from_dataframe(df_f_fpd0_appscorecash, facttable_id, job_config=job_config)
+job = client.load_table_from_dataframe(
+    df_f_fpd0_appscorecash, facttable_id, job_config=job_config
+)
 job.result()  # Wait for the job to complete
 
 # %%
@@ -972,11 +1150,13 @@ job.result()  # Wait for the job to complete
 # %%
 
 # dfd = dfd.drop_duplicates(keep='first')
-print(f"The shape of the dataframe downloaded is:\t {dfd[dfd['flg_mature_fpd10']==1].shape}")
-dfd[dfd['flg_mature_fpd10']==1].head()
+print(
+    f"The shape of the dataframe downloaded is:\t {dfd[dfd['flg_mature_fpd10']==1].shape}"
+)
+dfd[dfd["flg_mature_fpd10"] == 1].head()
 
 # %%
-df_concat = dfd[dfd['flg_mature_fpd10']==1].copy()
+df_concat = dfd[dfd["flg_mature_fpd10"] == 1].copy()
 
 
 # %%
@@ -1014,7 +1194,9 @@ df_d_fpd10_appscorecash = dimension_table.copy()
 job_config = bigquery.LoadJobConfig(
     write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
 )
-job = client.load_table_from_dataframe(df_f_fpd10_appscorecash, facttable_id, job_config=job_config)
+job = client.load_table_from_dataframe(
+    df_f_fpd10_appscorecash, facttable_id, job_config=job_config
+)
 job.result()  # Wait for the job to complete
 
 # %%
@@ -1035,11 +1217,13 @@ job.result()  # Wait for the job to complete
 # ### Test
 
 # %%
-print(f"The shape of the dataframe downloaded is:\t {dfd[dfd['flg_mature_fpd30']==1].shape}")
-dfd[dfd['flg_mature_fpd30']==1].head()
+print(
+    f"The shape of the dataframe downloaded is:\t {dfd[dfd['flg_mature_fpd30']==1].shape}"
+)
+dfd[dfd["flg_mature_fpd30"] == 1].head()
 
 # %%
-df_concat = dfd[dfd['flg_mature_fpd30']==1].copy()
+df_concat = dfd[dfd["flg_mature_fpd30"] == 1].copy()
 
 
 # %%
@@ -1060,7 +1244,7 @@ fact_table, dimension_table = calculate_periodic_gini_prod_ver_trench_dimfact(
     loan_product_type_column="loan_product_type",
     ostype_column="osType",
     apptype_column="Application_type",  # Add this
-     risk_segment_column="risk_segment",
+    risk_segment_column="risk_segment",
     risk_segment_final_column="risk_segment_final",
     account_id_column="digitalLoanAccountId",
 )
@@ -1077,7 +1261,9 @@ df_d_fpd30_appscorecash = dimension_table.copy()
 job_config = bigquery.LoadJobConfig(
     write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
 )
-job = client.load_table_from_dataframe(df_f_fpd30_appscorecash, facttable_id, job_config=job_config)
+job = client.load_table_from_dataframe(
+    df_f_fpd30_appscorecash, facttable_id, job_config=job_config
+)
 job.result()  # Wait for the job to complete
 
 # %%
@@ -1097,11 +1283,13 @@ job.result()  # Wait for the job to complete
 
 # ### Test
 
-print(f"The shape of the dataframe downloaded is:\t {dfd[dfd['flg_mature_fspd_30']==1].shape}")
-dfd[dfd['flg_mature_fspd_30']==1].head()
+print(
+    f"The shape of the dataframe downloaded is:\t {dfd[dfd['flg_mature_fspd_30']==1].shape}"
+)
+dfd[dfd["flg_mature_fspd_30"] == 1].head()
 
 # %%
-df_concat = dfd[dfd['flg_mature_fspd_30']==1].copy()
+df_concat = dfd[dfd["flg_mature_fspd_30"] == 1].copy()
 
 # %%
 df_concat["beta_cash_app_score"] = pd.to_numeric(
@@ -1139,7 +1327,9 @@ df_d_fspd30_appscorecash = dimension_table.copy()
 job_config = bigquery.LoadJobConfig(
     write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
 )
-job = client.load_table_from_dataframe(df_f_fspd30_appscorecash, facttable_id, job_config=job_config)
+job = client.load_table_from_dataframe(
+    df_f_fspd30_appscorecash, facttable_id, job_config=job_config
+)
 job.result()  # Wait for the job to complete
 
 # %%
@@ -1156,17 +1346,18 @@ job.result()  # Wait for the job to complete
 # %%
 
 
-
 # ### FSTPD30
 
 
 # ### Test
 
-print(f"The shape of the dataframe downloaded is:\t {dfd[dfd['flg_mature_fstpd_30']==1].shape}")
-dfd[dfd['flg_mature_fstpd_30']==1].head()
+print(
+    f"The shape of the dataframe downloaded is:\t {dfd[dfd['flg_mature_fstpd_30']==1].shape}"
+)
+dfd[dfd["flg_mature_fstpd_30"] == 1].head()
 
 # %%
-df_concat = dfd[dfd['flg_mature_fstpd_30']==1].copy()
+df_concat = dfd[dfd["flg_mature_fstpd_30"] == 1].copy()
 
 # %%
 df_concat["beta_cash_app_score"] = pd.to_numeric(
@@ -1186,7 +1377,7 @@ fact_table, dimension_table = calculate_periodic_gini_prod_ver_trench_dimfact(
     loan_product_type_column="loan_product_type",
     ostype_column="osType",
     apptype_column="Application_type",  # Add this
-     risk_segment_column="risk_segment",
+    risk_segment_column="risk_segment",
     risk_segment_final_column="risk_segment_final",
     account_id_column="digitalLoanAccountId",
 )
@@ -1205,7 +1396,9 @@ df_d_fstpd30_appscorecash = dimension_table.copy()
 job_config = bigquery.LoadJobConfig(
     write_disposition="WRITE_APPEND",  # or "WRITE_APPEND"
 )
-job = client.load_table_from_dataframe(df_f_fstpd30_appscorecash, facttable_id, job_config=job_config)
+job = client.load_table_from_dataframe(
+    df_f_fstpd30_appscorecash, facttable_id, job_config=job_config
+)
 job.result()  # Wait for the job to complete
 
 # %%
@@ -1219,8 +1412,8 @@ job = client.load_table_from_dataframe(
 )
 job.result()  # Wait for the job to complete
 
-factappscorecash = pd.concat([df_f_fpd0_appscorecash, df_f_fpd10_appscorecash, df_f_fpd30_appscorecash, df_f_fspd30_appscorecash, df_f_fstpd30_appscorecash], ignore_index=True)
-dimappscorecash = pd.concat([df_d_fpd0_appscorecash, df_d_fpd10_appscorecash, df_d_fpd30_appscorecash, df_d_fspd30_appscorecash, df_d_fstpd30_appscorecash], ignore_index=True)
+# factappscorecash = pd.concat([df_f_fpd0_appscorecash, df_f_fpd10_appscorecash, df_f_fpd30_appscorecash, df_f_fspd30_appscorecash, df_f_fstpd30_appscorecash], ignore_index=True)
+# dimappscorecash = pd.concat([df_d_fpd0_appscorecash, df_d_fpd10_appscorecash, df_d_fpd30_appscorecash, df_d_fspd30_appscorecash, df_d_fstpd30_appscorecash], ignore_index=True)
 
 
 # %%
@@ -1553,7 +1746,7 @@ dimappscorecash = pd.concat([df_d_fpd0_appscorecash, df_d_fpd10_appscorecash, df
 #         gini_results["apptype"] = (metadata.get(apptype_column, None) if apptype_column else None
 #         )
 #         gini_results["risk_segment"] = metadata.get(risk_segment_column, None) if risk_segment_column else None
-#         gini_results["risk_segment_final"] = metadata.get(risk_segment_final_column, None) if risk_segment_final_column else None   
+#         gini_results["risk_segment_final"] = metadata.get(risk_segment_final_column, None) if risk_segment_final_column else None
 
 #         all_results.append(gini_results)
 
@@ -1574,7 +1767,7 @@ dimappscorecash = pd.concat([df_d_fpd0_appscorecash, df_d_fpd10_appscorecash, df
 #                 "loan_product_type",
 #                 "ostype",
 #                 "apptype",
-#                 "risk_segment", 
+#                 "risk_segment",
 #                 "risk_segment_final",
 #             ]
 #         ]
@@ -1598,7 +1791,7 @@ dimappscorecash = pd.concat([df_d_fpd0_appscorecash, df_d_fpd10_appscorecash, df
 #                 "loan_product_type",
 #                 "ostype",
 #                 "apptype",
-#                 "risk_segment", 
+#                 "risk_segment",
 #                 "risk_segment_final",
 #             ]
 #         ],
@@ -1613,7 +1806,7 @@ dimappscorecash = pd.concat([df_d_fpd0_appscorecash, df_d_fpd10_appscorecash, df
 #             "loan_product_type",
 #             "ostype",
 #             "apptype",
-#             "risk_segment", 
+#             "risk_segment",
 #             "risk_segment_final",
 #         ],
 #         how="left",
@@ -1639,7 +1832,7 @@ dimappscorecash = pd.concat([df_d_fpd0_appscorecash, df_d_fpd10_appscorecash, df
 #             "loan_product_type",
 #             "ostype",
 #             "apptype",
-#             "risk_segment", 
+#             "risk_segment",
 #             "risk_segment_final"
 #         ]
 #     ]
@@ -1658,7 +1851,7 @@ dimappscorecash = pd.concat([df_d_fpd0_appscorecash, df_d_fpd10_appscorecash, df
 #             "loan_product_type",
 #             "ostype",
 #             "apptype",
-#             "risk_segment", 
+#             "risk_segment",
 #             "risk_segment_final"
 #         ]
 #     ]
@@ -1691,7 +1884,7 @@ dimappscorecash = pd.concat([df_d_fpd0_appscorecash, df_d_fpd10_appscorecash, df
 #         "loan_product_type",
 #         "ostype",
 #         "apptype",
-#         "risk_segment", 
+#         "risk_segment",
 #         "risk_segment_final",
 #     ]
 
@@ -1753,8 +1946,8 @@ dimappscorecash = pd.concat([df_d_fpd0_appscorecash, df_d_fpd10_appscorecash, df
 #   coalesce(SAFE_CAST(JSON_VALUE(p.prediction_clean, "$.combined_score") AS Float64)) AS beta_cash_app_score,
 #   case when modelDisplayName like 'Beta-Cash-AppScore-Model' then 'apps_score_cash' else modelDisplayName end as modelDisplayName,
 #   p.modelVersionId,
-#   -- coalesce(p.trenchCategory, JSON_VALUE(m.requestPayload_clean, "$.predictions.trenchCategory"))  
-#   p.trenchCategory, 
+#   -- coalesce(p.trenchCategory, JSON_VALUE(m.requestPayload_clean, "$.predictions.trenchCategory"))
+#   p.trenchCategory,
 #   osType
 #   from latest_request p
 #   -- left join model_run m on p.digitalLoanAccountId = m.digitalLoanAccountId
@@ -1988,7 +2181,7 @@ dimappscorecash = pd.concat([df_d_fpd0_appscorecash, df_d_fpd10_appscorecash, df
 #   coalesce(SAFE_CAST(JSON_VALUE(p.prediction_clean, "$.combined_score") AS Float64)) AS beta_cash_app_score,
 #   case when modelDisplayName like 'Beta-Cash-AppScore-Model' then 'apps_score_cash' else modelDisplayName end as modelDisplayName,
 #   p.modelVersionId,
-#   -- coalesce(p.trenchCategory, JSON_VALUE(m.requestPayload_clean, "$.predictions.trenchCategory")) 
+#   -- coalesce(p.trenchCategory, JSON_VALUE(m.requestPayload_clean, "$.predictions.trenchCategory"))
 #    p.trenchCategory, osType
 #   from latest_request p
 #   -- left join model_run m on p.digitalLoanAccountId = m.digitalLoanAccountId
@@ -2456,7 +2649,7 @@ dimappscorecash = pd.concat([df_d_fpd0_appscorecash, df_d_fpd10_appscorecash, df
 #   coalesce(SAFE_CAST(JSON_VALUE(p.prediction_clean, "$.combined_score") AS Float64)) AS beta_cash_app_score,
 #   case when modelDisplayName like 'Beta-Cash-AppScore-Model' then 'apps_score_cash' else modelDisplayName end as modelDisplayName,
 #   p.modelVersionId,
-#   -- coalesce(p.trenchCategory, JSON_VALUE(m.requestPayload_clean, "$.predictions.trenchCategory")) 
+#   -- coalesce(p.trenchCategory, JSON_VALUE(m.requestPayload_clean, "$.predictions.trenchCategory"))
 #    p.trenchCategory, osType
 #   from latest_request p
 #   -- left join model_run m on p.digitalLoanAccountId = m.digitalLoanAccountId
@@ -2660,7 +2853,6 @@ dimappscorecash = pd.concat([df_d_fpd0_appscorecash, df_d_fpd10_appscorecash, df
 # # %%
 
 
-
 # # ### FSTPD30
 
 
@@ -2693,7 +2885,7 @@ dimappscorecash = pd.concat([df_d_fpd0_appscorecash, df_d_fpd10_appscorecash, df
 #   coalesce(SAFE_CAST(JSON_VALUE(p.prediction_clean, "$.combined_score") AS Float64)) AS beta_cash_app_score,
 #   case when modelDisplayName like 'Beta-Cash-AppScore-Model' then 'apps_score_cash' else modelDisplayName end as modelDisplayName,
 #   p.modelVersionId,
-#   -- coalesce(p.trenchCategory, JSON_VALUE(m.requestPayload_clean, "$.predictions.trenchCategory"))  
+#   -- coalesce(p.trenchCategory, JSON_VALUE(m.requestPayload_clean, "$.predictions.trenchCategory"))
 #   p.trenchCategory, osType
 #   from latest_request p
 #   -- left join model_run m on p.digitalLoanAccountId = m.digitalLoanAccountId
@@ -2905,6 +3097,3 @@ dimappscorecash = pd.concat([df_d_fpd0_appscorecash, df_d_fpd10_appscorecash, df
 # # End
 
 # %%
-
-
-
