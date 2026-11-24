@@ -8,20 +8,20 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # List your parallel python files
 # -----------------------------------
 PY_FILES = [
-    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_Alpha_cash_stack_test.py",
-    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_cash_appscore_model.py",
-    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_cash_demo_model.py",
-    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_cash_stack_model_credo_score.py",
-    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_cash_stack_model.py",
-    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_events_model_cash.py",
-    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_cic_model_cash.py",
-    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_cash_stack_model_transaction_score.py",
-    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_alpha_stack_model_sil.py",
-    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_Beta App Score SIL.py",
-    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_beta_stack_model_sil_credo_score.py",
-    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_BetaSILDemoScore.py",
-    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_BetaSILSTACKScoreModel.py",
-    # r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_cic_model_sil.py",
+    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_Alpha_cash_stack_test.py",
+    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_cash_appscore_model.py",
+    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_cash_demo_model.py",
+    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_cash_stack_model_credo_score.py",
+    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_cash_stack_model.py",
+    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_events_model_cash.py",
+    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_cic_model_cash.py",
+    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Cash_Test_Models\Cash_Test_Models_Executables\Gini_calculation_test_cash_beta_cash_stack_model_transaction_score.py",
+    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_alpha_stack_model_sil.py",
+    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_Beta App Score SIL.py",
+    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_beta_stack_model_sil_credo_score.py",
+    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_BetaSILDemoScore.py",
+    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_BetaSILSTACKScoreModel.py",
+    r"D:\OneDrive - Tonik Financial Pte Ltd\MyStuff\Data Engineering\Model_Monitoring_Individual_scripts\Gini_Monitoring\Sil_Test_Models\Sil_Test_Models_Executables\Gini_calculation_test_sil_cic_model_sil.py",
 ]
 
 CONSOLIDATED_FILES = [
@@ -150,6 +150,19 @@ def main():
 
                 except Exception as e:
                     print(f"Consolidated script failed: {file}")
+                    print(e)
+
+        print_status_table()
+
+    else:
+        print("Skipping consolidated files because some jobs failed")
+
+
+# -----------------------------------
+# Entry point
+# -----------------------------------
+if __name__ == "__main__":
+    main()
                     print(e)
 
         print_status_table()
