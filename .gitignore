@@ -196,3 +196,4 @@ reports/generated/
 *.sqlite
 *.sqlite3
 *.duckdb
+*.docx
